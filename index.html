@@ -203,8 +203,8 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
   <!-- STEP 2 -->
   <div id="step2" style="display:none">
     <div class="card">
-      <div class="card-title">구글 캘린더 연동 상태</div>
-      <div class="gcal-bar"><div class="dot"></div><span>구글 캘린더 미연동 — 강사 설정의 가능 시간 기준으로만 추천합니다</span></div>
+      <div class="card-title">캘린더 연동 상태</div>
+      <div id="step2-ics-status" class="gcal-bar"><div class="dot"></div><span>ICS 불러오는 중...</span></div>
     </div>
     <div class="card">
       <div class="card-title">추천 일정 <span style="font-size:12px;font-weight:400;color:var(--muted)">— 클릭해서 선택</span></div>
@@ -253,12 +253,11 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
   <div class="sec-title">설정</div>
   <div class="sec-sub">구글 캘린더 연동 및 앱 설정</div>
   <div class="card">
-    <div class="card-title">구글 캘린더 연동</div>
-    <div class="form-row col2">
-      <div class="form-group"><label>Google API Key</label><input type="password" id="cfg-apikey" placeholder="AIza..."></div>
-      <div class="form-group"><label>Google OAuth Client ID</label><input type="text" id="cfg-clientid" placeholder="xxx.apps.googleusercontent.com"></div>
-    </div>
-    <button class="btn btn-primary mt16" onclick="saveGCalConfig()">저장</button>
+    <div class="card-title">캘린더 연동 안내</div>
+    <div class="notice">강사별 ICS URL은 <b>강사 설정 탭 → 편집 → 아웃룩 ICS URL</b> 에 입력하세요.</div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.8">입력 후 일정 추천 시 해당 강사의 기존 수업을 자동으로 읽어 빈 시간만 추천합니다.</div>
+    <div id="ics-status" style="margin-top:16px"></div>
+    <button class="btn btn-accent mt16" onclick="testAllICS()">전체 강사 ICS 연결 테스트</button>
   </div>
   <div class="card">
     <div class="card-title">비밀번호 변경</div>
@@ -297,7 +296,7 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
             <option value="5">5시간</option><option value="6">6시간</option><option value="8">제한 없음</option>
           </select>
         </div>
-        <div class="form-group"><label>구글 캘린더 ID</label><input type="text" id="modal-calid" placeholder="abc@group.calendar.google.com"></div>
+        <div class="form-group"><label>아웃룩 ICS URL</label><input type="text" id="modal-calid" placeholder="https://outlook.live.com/owa/calendar/.../calendar.ics" style="font-size:11px"></div>
       </div>
     </div>
     <div id="mTab-profile" style="display:none">
@@ -624,7 +623,7 @@ function getCombos(arr,k){
     getCombos(arr.slice(i+1),k-1).forEach(r=>res.push([arr[i],...r]));
   return res;
 }
-function isConflict(insId,day,time){return false;}
+function isConflict(insId,day,time){return isConflictICS(insId,day,time);}
 
 // ── STEPS
 function setStep(n){
@@ -636,13 +635,24 @@ function setStep(n){
     if(i===n)ind.classList.add('active');
   });
 }
-function goStep2(){
+async function goStep2(){
   const name=document.getElementById('s-name').value.trim();
   const phone=document.getElementById('s-phone').value.trim();
   const subjects=getChecked('s-subjects');
   if(!name||!phone)return alert('학생 이름과 전화번호는 필수입니다.');
   if(subjects.length===0)return alert('수업 과목을 1개 이상 선택해주세요.');
   setStep(2);
+  document.getElementById('slotResults').innerHTML='<div class="empty">강사 캘린더 불러오는 중...</div>';
+  await prefetchAllICS();
+  const withUrls=instructors.filter(i=>i.calId).length;
+  const statusEl=document.getElementById('step2-ics-status');
+  if(withUrls>0){
+    statusEl.className='gcal-bar connected';
+    statusEl.style.background='#e8f5e9';statusEl.style.color='#2e7d32';
+    statusEl.innerHTML='<div class="dot" style="background:var(--success)"></div><span>'+withUrls+'명 강사 캘린더 연동됨 — 기존 수업 반영해서 추천합니다</span>';
+  } else {
+    statusEl.innerHTML='<div class="dot"></div><span>ICS URL 미입력 — 강사 설정의 가능 시간 기준으로만 추천합니다</span>';
+  }
   renderSlotResults(computeSlots());
 }
 function goStep3(){
@@ -882,6 +892,85 @@ function saveInstructor(){
   ins.calId=document.getElementById('modal-calid').value.trim();
   ins.profile=document.getElementById('modal-profile').value;
   saveData(); renderInsGrid(); closeModal();
+}
+
+// ── ICS ENGINE
+const icsCache={};
+
+async function fetchICS(ins){
+  if(!ins.calId)return[];
+  const now=Date.now();
+  if(icsCache[ins.id]&&now-icsCache[ins.id].fetched<5*60*1000)return icsCache[ins.id].events;
+  try{
+    const proxyUrl='https://api.allorigins.win/get?url='+encodeURIComponent(ins.calId);
+    const res=await fetch(proxyUrl);
+    const json=await res.json();
+    const events=parseICS(json.contents||'');
+    icsCache[ins.id]={fetched:now,events};
+    return events;
+  }catch(e){
+    console.warn('ICS fetch failed for',ins.name,e);
+    return[];
+  }
+}
+
+function parseICS(text){
+  const events=[];
+  const blocks=text.split('BEGIN:VEVENT');
+  blocks.slice(1).forEach(block=>{
+    const dtstart=block.match(/DTSTART[^:\n]*:([^\n]+)/);
+    const dtend=block.match(/DTEND[^:\n]*:([^\n]+)/);
+    if(dtstart&&dtend){
+      const s=parseICSDate(dtstart[1].trim());
+      const e=parseICSDate(dtend[1].trim());
+      if(s&&e)events.push({start:s,end:e});
+    }
+  });
+  return events;
+}
+
+function parseICSDate(s){
+  const clean=s.replace('Z','').replace(/[^0-9T]/g,'');
+  if(clean.length<8)return null;
+  const y=clean.slice(0,4),mo=clean.slice(4,6),d=clean.slice(6,8);
+  const h=clean.length>8?clean.slice(9,11):'00';
+  const mi=clean.length>10?clean.slice(11,13):'00';
+  return new Date(y+'-'+mo+'-'+d+'T'+h+':'+mi+':00+09:00');
+}
+
+function dayKoFromDate(date){
+  return['일','월','화','수','목','금','토'][date.getDay()];
+}
+
+function isConflictICS(insId,day,time){
+  const cache=icsCache[insId];
+  if(!cache||!cache.events.length)return false;
+  const [h]=time.split(':').map(Number);
+  return cache.events.some(ev=>{
+    if(dayKoFromDate(ev.start)!==day)return false;
+    return ev.start.getHours()===h;
+  });
+}
+
+async function prefetchAllICS(){
+  const withUrls=instructors.filter(i=>i.calId);
+  if(!withUrls.length)return;
+  await Promise.all(withUrls.map(ins=>fetchICS(ins)));
+}
+
+async function testAllICS(){
+  const statusEl=document.getElementById('ics-status');
+  statusEl.innerHTML='<span style="color:var(--muted)">테스트 중...</span>';
+  const results=await Promise.all(instructors.map(async ins=>{
+    if(!ins.calId)return'<div style="margin-bottom:6px">⚪ <b>'+ins.name+'</b> — ICS URL 미입력</div>';
+    try{
+      const events=await fetchICS(ins);
+      return'<div style="margin-bottom:6px">✅ <b>'+ins.name+'</b> — '+events.length+'개 일정 로드됨</div>';
+    }catch(e){
+      return'<div style="margin-bottom:6px">❌ <b>'+ins.name+'</b> — 연결 실패</div>';
+    }
+  }));
+  statusEl.innerHTML=results.join('');
 }
 
 // ── SETTINGS
