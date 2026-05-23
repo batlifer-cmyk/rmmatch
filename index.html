@@ -896,81 +896,134 @@ function saveInstructor(){
 
 // ── ICS ENGINE
 const icsCache={};
+const DAY_KO=['일','월','화','수','목','금','토'];
+const RRULE_DAY_MAP={SU:0,MO:1,TU:2,WE:3,TH:4,FR:5,SA:6};
 
-async function fetchICS(ins){
-  if(!ins.calId)return[];
-  const now=Date.now();
-  if(icsCache[ins.id]&&now-icsCache[ins.id].fetched<5*60*1000)return icsCache[ins.id].events;
-  try{
-    const proxyUrl='https://api.allorigins.win/get?url='+encodeURIComponent(ins.calId);
-    const res=await fetch(proxyUrl);
-    const json=await res.json();
-    const events=parseICS(json.contents||'');
-    icsCache[ins.id]={fetched:now,events};
-    return events;
-  }catch(e){
-    console.warn('ICS fetch failed for',ins.name,e);
-    return[];
+// ICS 날짜 파싱 — TZID 포함/UTC/로컬 모두 처리
+function parseICSDate(s,tzid){
+  s=s.trim().replace(/\r/g,'');
+  const isUTC=s.endsWith('Z');
+  const clean=s.replace('Z','');
+  if(clean.length<8)return null;
+  const y=+clean.slice(0,4),mo=+clean.slice(4,6)-1,d=+clean.slice(6,8);
+  const hasTime=clean.length>8;
+  const h=hasTime?+clean.slice(9,11):0;
+  const mi=hasTime?+clean.slice(11,13):0;
+  if(isUTC){
+    // UTC → KST (+9)
+    return new Date(Date.UTC(y,mo,d,h,mi)+9*3600*1000);
   }
+  // TZID=Asia/Seoul 또는 로컬 → 한국시간으로 취급
+  return new Date(y,mo,d,h,mi);
 }
 
+// ICS 텍스트 파싱 — 단일 이벤트 + RRULE 주간반복 모두 처리
 function parseICS(text){
-  const events=[];
+  // unfold folded lines (lines starting with space/tab are continuations)
+  text=text.replace(/\r\n[ \t]/g,'').replace(/\r/g,'');
+  const slots=[]; // {dayOfWeek:0-6, hour:0-23} — 충돌 체크용
+
   const blocks=text.split('BEGIN:VEVENT');
   blocks.slice(1).forEach(block=>{
-    const dtstart=block.match(/DTSTART[^:\n]*:([^\n]+)/);
-    const dtend=block.match(/DTEND[^:\n]*:([^\n]+)/);
-    if(dtstart&&dtend){
-      const s=parseICSDate(dtstart[1].trim());
-      const e=parseICSDate(dtend[1].trim());
-      if(s&&e)events.push({start:s,end:e});
+    const endIdx=block.indexOf('END:VEVENT');
+    if(endIdx>-1)block=block.slice(0,endIdx);
+
+    const getVal=(key)=>{
+      const m=block.match(new RegExp(key+'(?:;[^:]*)?:([^\n]+)'));
+      return m?m[1].trim():'';
+    };
+    const getTZID=(key)=>{
+      const m=block.match(new RegExp(key+';TZID=([^:]+):([^\n]+)'));
+      return m?{tzid:m[1].trim(),val:m[2].trim()}:null;
+    };
+
+    // Parse DTSTART
+    let dtStart=null;
+    const tzStart=getTZID('DTSTART');
+    if(tzStart) dtStart=parseICSDate(tzStart.val,tzStart.tzid);
+    else { const v=getVal('DTSTART'); if(v)dtStart=parseICSDate(v,''); }
+    if(!dtStart)return;
+
+    const rrule=getVal('RRULE');
+
+    if(rrule&&rrule.includes('FREQ=WEEKLY')){
+      // 주간 반복 — BYDAY로 요일 추출
+      const bydayM=rrule.match(/BYDAY=([^;\n]+)/);
+      const days=bydayM?bydayM[1].split(',').map(d=>d.trim().replace(/^[-+]?\d*/,'')):
+        [['SU','MO','TU','WE','TH','FR','SA'][dtStart.getDay()]];
+      const hour=dtStart.getHours();
+      days.forEach(d=>{
+        const dow=RRULE_DAY_MAP[d];
+        if(dow!==undefined) slots.push({dow,hour});
+      });
+    } else {
+      // 단일 이벤트
+      slots.push({dow:dtStart.getDay(), hour:dtStart.getHours()});
     }
   });
-  return events;
-}
-
-function parseICSDate(s){
-  const clean=s.replace('Z','').replace(/[^0-9T]/g,'');
-  if(clean.length<8)return null;
-  const y=clean.slice(0,4),mo=clean.slice(4,6),d=clean.slice(6,8);
-  const h=clean.length>8?clean.slice(9,11):'00';
-  const mi=clean.length>10?clean.slice(11,13):'00';
-  return new Date(y+'-'+mo+'-'+d+'T'+h+':'+mi+':00+09:00');
-}
-
-function dayKoFromDate(date){
-  return['일','월','화','수','목','금','토'][date.getDay()];
+  return slots;
 }
 
 function isConflictICS(insId,day,time){
   const cache=icsCache[insId];
-  if(!cache||!cache.events.length)return false;
+  if(!cache||!cache.slots||!cache.slots.length)return false;
+  const targetDow=DAY_KO.indexOf(day);
   const [h]=time.split(':').map(Number);
-  return cache.events.some(ev=>{
-    if(dayKoFromDate(ev.start)!==day)return false;
-    return ev.start.getHours()===h;
-  });
+  return cache.slots.some(s=>s.dow===targetDow&&s.hour===h);
+}
+
+async function fetchICS(ins){
+  if(!ins.calId)return[];
+  const now=Date.now();
+  if(icsCache[ins.id]&&now-icsCache[ins.id].fetched<10*60*1000)return icsCache[ins.id].slots;
+  const proxies=[
+    'https://api.allorigins.win/get?url=',
+    'https://corsproxy.io/?'
+  ];
+  for(const proxy of proxies){
+    try{
+      const ctrl=new AbortController();
+      const tid=setTimeout(()=>ctrl.abort(),8000);
+      const res=await fetch(proxy+encodeURIComponent(ins.calId),{signal:ctrl.signal});
+      clearTimeout(tid);
+      let text='';
+      if(proxy.includes('allorigins')){
+        const json=await res.json();
+        text=json.contents||'';
+      } else {
+        text=await res.text();
+      }
+      if(!text||!text.includes('VCALENDAR'))continue;
+      const slots=parseICS(text);
+      icsCache[ins.id]={fetched:now,slots};
+      return slots;
+    }catch(e){
+      console.warn('proxy failed:',proxy,e.message);
+    }
+  }
+  icsCache[ins.id]={fetched:now,slots:[]};
+  return[];
 }
 
 async function prefetchAllICS(){
   const withUrls=instructors.filter(i=>i.calId);
   if(!withUrls.length)return;
-  await Promise.all(withUrls.map(ins=>fetchICS(ins)));
+  // 병렬 fetch, 개별 실패해도 전체 진행
+  await Promise.allSettled(withUrls.map(ins=>fetchICS(ins)));
 }
 
 async function testAllICS(){
   const statusEl=document.getElementById('ics-status');
-  statusEl.innerHTML='<span style="color:var(--muted)">테스트 중...</span>';
-  const results=await Promise.all(instructors.map(async ins=>{
+  statusEl.innerHTML='<span style="color:var(--muted)">테스트 중... (최대 10초)</span>';
+  // clear cache to force re-fetch
+  Object.keys(icsCache).forEach(k=>delete icsCache[k]);
+  const results=await Promise.allSettled(instructors.map(async ins=>{
     if(!ins.calId)return'<div style="margin-bottom:6px">⚪ <b>'+ins.name+'</b> — ICS URL 미입력</div>';
-    try{
-      const events=await fetchICS(ins);
-      return'<div style="margin-bottom:6px">✅ <b>'+ins.name+'</b> — '+events.length+'개 일정 로드됨</div>';
-    }catch(e){
-      return'<div style="margin-bottom:6px">❌ <b>'+ins.name+'</b> — 연결 실패</div>';
-    }
+    const slots=await fetchICS(ins);
+    if(slots.length>0)return'<div style="margin-bottom:6px">✅ <b>'+ins.name+'</b> — '+slots.length+'개 수업 슬롯 감지됨</div>';
+    return'<div style="margin-bottom:6px">❌ <b>'+ins.name+'</b> — 로드 실패 또는 일정 없음</div>';
   }));
-  statusEl.innerHTML=results.join('');
+  statusEl.innerHTML=results.map(r=>r.value||r.reason).join('');
 }
 
 // ── SETTINGS
