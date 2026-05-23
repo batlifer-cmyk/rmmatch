@@ -220,15 +220,13 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
   <div id="step3" style="display:none">
     <div class="card">
       <div class="card-title">수업 시작일 & 발송 방식</div>
-      <div class="form-row col2">
-        <div class="form-group"><label>수업 시작일 *</label><input type="date" id="s-startdate" onchange="generateMessages()"></div>
-        <div class="form-group">
-          <label>학생에게 일정 제안 방식</label>
-          <select id="s-offerChoice" onchange="generateMessages()">
-            <option value="single">단일 일정 확정 안내</option>
-            <option value="multi">복수 선택지 제공</option>
-          </select>
-        </div>
+      <div id="startdate-wrap"></div>
+      <div class="form-group" style="margin-top:14px">
+        <label>학생에게 일정 제안 방식</label>
+        <select id="s-offerChoice" onchange="generateMessages()" style="max-width:280px">
+          <option value="single">단일 일정 확정 안내</option>
+          <option value="multi">복수 선택지 제공</option>
+        </select>
       </div>
     </div>
     <div class="card">
@@ -650,10 +648,7 @@ function goStep2(){
 function goStep3(){
   if(!selectedSlot)return alert('일정을 선택해주세요.');
   setStep(3);
-  const today=new Date();
-  const diff=(8-today.getDay())%7||7;
-  const next=new Date(today); next.setDate(today.getDate()+diff);
-  document.getElementById('s-startdate').valueAsDate=next;
+  renderStartDateInputs();
   generateMessages();
 }
 
@@ -706,29 +701,78 @@ function renderSlotResults(slots){
 }
 
 // ── MESSAGES
+function getInsGroups(entries){
+  const map={};const order=[];
+  entries.forEach(e=>{
+    if(!map[e.instructor.id]){map[e.instructor.id]={ins:e.instructor,entries:[]};order.push(e.instructor.id);}
+    map[e.instructor.id].entries.push(e);
+  });
+  return order.map(id=>map[id]);
+}
+
+function getNextMonStr(){
+  const today=new Date();
+  const diff=(8-today.getDay())%7||7;
+  const next=new Date(today); next.setDate(today.getDate()+diff);
+  return next.toISOString().split('T')[0];
+}
+
+function renderStartDateInputs(){
+  const wrap=document.getElementById('startdate-wrap');
+  if(!wrap||!selectedSlot)return;
+  const entries=selectedSlot.entries;
+  const allSameIns=new Set(entries.map(e=>e.instructor.id)).size===1;
+  const nextMon=getNextMonStr();
+  if(allSameIns){
+    wrap.innerHTML='<div class="form-row col2"><div class="form-group"><label>수업 시작일 *</label><input type="date" id="s-startdate-0" value="'+nextMon+'" onchange="generateMessages()"></div></div>';
+  } else {
+    const groups=getInsGroups(entries);
+    let html='<div style="margin-bottom:10px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">강사별 수업 시작일</div>';
+    groups.forEach((g,i)=>{
+      const gLabel=g.entries.map(e=>e.day+'요일').join(', ');
+      html+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;padding:10px 14px;border:1.5px solid #e0e0e0;border-radius:4px;background:#fafafa">'
+        +'<span style="min-width:170px;font-size:13px;font-weight:600">'+g.ins.name.split(' ')[0]+' <span style="font-weight:400;color:var(--muted)">('+gLabel+')</span></span>'
+        +'<input type="date" id="s-startdate-'+i+'" value="'+nextMon+'" onchange="generateMessages()" style="padding:7px 10px;border:1.5px solid #e0e0e0;border-radius:3px;font-size:13px;font-family:inherit">'
+        +'</div>';
+    });
+    wrap.innerHTML=html;
+  }
+}
+
+function getStartDates(){
+  if(!selectedSlot)return[''];
+  const entries=selectedSlot.entries;
+  const allSameIns=new Set(entries.map(e=>e.instructor.id)).size===1;
+  if(allSameIns){
+    const el=document.getElementById('s-startdate-0');
+    return[el?el.value:''];
+  }
+  const groups=getInsGroups(entries);
+  return groups.map((_,i)=>{
+    const el=document.getElementById('s-startdate-'+i);
+    return el?el.value:'';
+  });
+}
+
 function generateMessages(){
   if(!selectedSlot)return;
   const name=document.getElementById('s-name').value.trim();
   const phone=document.getElementById('s-phone').value.trim();
-  const subjects=getChecked('s-subjects').join(', ');
   const freq=document.getElementById('s-freq').value;
   const dur=document.getElementById('s-duration').value;
   const detail=document.getElementById('s-detail').value.trim();
-  const startStr=document.getElementById('s-startdate').value;
   const offerChoice=document.getElementById('s-offerChoice').value;
   const entries=selectedSlot.entries;
   const allSameIns=new Set(entries.map(e=>e.instructor.id)).size===1;
-
+  const startDates=getStartDates();
   const durLabel=dur==='1'?'1시간':dur==='1.5'?'1시간 30분':'2시간';
-  const startFmt=fmtDate(startStr);
+  const startFmt=fmtDate(startDates[0]);
   const oneLiner=entries.map(e=>`${e.day}요일 ${fmtTime(e.time)}`).join(' / ');
   const dayLabels=entries.map(e=>e.day+'요일').join(', ');
   const timeLabels=[...new Set(entries.map(e=>fmtTime(e.time)))].join(', ');
-
   const msgs=[];
 
   if(allSameIns){
-    // ── 단일 강사 흐름 (기존과 동일)
     const ins=entries[0].instructor;
     const msg1=`신규(${name}님) ${oneLiner} 있습니다.`;
     let msg2;
@@ -739,7 +783,6 @@ function generateMessages(){
     }
     const msg3=`[수업일정 확정 안내]\n매주 주${freq}회, ${durLabel}씩\n${dayLabels} ${timeLabels}\n\n수업 시작일은 ${startFmt}입니다.\n\n* 수업장소 : 라이언멤버스 교실\n벽산E오렌지프라자 5층 542호, 535호 (짐보리 옆)\nhttp://naver.me/GVbfXaul`;
     const msg6=`수업일정 확정\n${name} ${phone}\n\n매주 주${freq}회, ${durLabel}씩\n${dayLabels} ${timeLabels}\n\n수업 시작일은 ${startFmt}입니다.\n\n상세정보\n${detail||'(상세정보 없음)'}`;
-
     msgs.push({label:'① 강사 1차 안내',type:'ins',to:ins.name,body:msg1});
     msgs.push({label:'② 학생 일정 제안',type:'stu',to:name,body:msg2});
     msgs.push({label:'③ 학생 확정 — 수업일정',type:'stu',to:name,body:msg3});
@@ -748,23 +791,12 @@ function generateMessages(){
     msgs.push({label:'⑥ 강사 확정 메세지',type:'ins',to:ins.name,body:msg6});
 
   } else {
-    // ── 복수 강사 흐름
-    // 강사별로 담당 요일 묶기
-    const insMap={};
-    entries.forEach(e=>{
-      if(!insMap[e.instructor.id]) insMap[e.instructor.id]={instructor:e.instructor,entries:[]};
-      insMap[e.instructor.id].entries.push(e);
-    });
-    const insGroups=Object.values(insMap);
-
-    // 강사 1차 안내 — 각 강사에게
+    const insGroups=getInsGroups(entries);
     insGroups.forEach((g,i)=>{
       const gOneLiner=g.entries.map(e=>`${e.day}요일 ${fmtTime(e.time)}`).join(' / ');
-      msgs.push({label:`① 강사 1차 안내 (${g.instructor.name})`,type:'ins',to:g.instructor.name,
+      msgs.push({label:`① 강사 1차 안내 (${g.ins.name})`,type:'ins',to:g.ins.name,
         body:`신규(${name}님) ${gOneLiner} 있습니다.`});
     });
-
-    // 학생 일정 제안
     let msg2;
     if(offerChoice==='single'){
       msg2=`${oneLiner} 준비되었습니다.\n${startFmt}부터 시작하도록 확정해서 곧 선생님 정보가 포함된 안내 메세지를 드릴게요. 시작일 변경 원하시면 말씀주세요~`;
@@ -772,26 +804,23 @@ function generateMessages(){
       msg2=`일정 조율 안내드립니다 :)\n아래 중 편하신 시간 선택해 주세요!\n\n1) ${oneLiner}\n2) (추가 옵션을 여기에 입력하세요)\n\n${startFmt}부터 시작 예정입니다.`;
     }
     msgs.push({label:'② 학생 일정 제안',type:'stu',to:name,body:msg2});
-
-    // 수업일정 확정 (요일별 시간 명시)
-    const schedDetail=entries.map(e=>`${e.day}요일 ${fmtTime(e.time)} — ${e.instructor.name.split(' ')[0]} 선생님`).join('\n');
-    const msg3=`[수업일정 확정 안내]\n매주 주${freq}회, ${durLabel}씩\n\n${schedDetail}\n\n수업 시작일은 ${startFmt}입니다.\n\n* 수업장소 : 라이언멤버스 교실\n벽산E오렌지프라자 5층 542호, 535호 (짐보리 옆)\nhttp://naver.me/GVbfXaul`;
+    const schedDetail=insGroups.map((g,i)=>{
+      const gStart=fmtDate(startDates[i]||startDates[0]);
+      const gLine=g.entries.map(e=>`${e.day}요일 ${fmtTime(e.time)}`).join(', ');
+      return `${gLine} — ${g.ins.name.split(' ')[0]} 선생님 (시작일 ${gStart})`;
+    }).join('\n');
+    const msg3=`[수업일정 확정 안내]\n매주 주${freq}회, ${durLabel}씩\n\n${schedDetail}\n\n* 수업장소 : 라이언멤버스 교실\n벽산E오렌지프라자 5층 542호, 535호 (짐보리 옆)\nhttp://naver.me/GVbfXaul`;
     msgs.push({label:'③ 학생 확정 — 수업일정',type:'stu',to:name,body:msg3});
-
-    // 강사 프로필 — 각 강사별로
     insGroups.forEach((g,i)=>{
-      msgs.push({label:`④ 학생 확정 — ${g.instructor.name} 프로필`,type:'stu',to:name,body:g.instructor.profile});
+      msgs.push({label:`④ 학생 확정 — ${g.ins.name} 프로필`,type:'stu',to:name,body:g.ins.profile});
     });
-
     msgs.push({label:'⑤ 학생 확정 — 공통 이미지',type:'stu',to:name,body:'📎 공통 안내 이미지를 카카오톡에서 별도 첨부해주세요.'});
-
-    // 강사 확정 — 각 강사에게
     insGroups.forEach((g,i)=>{
       const gDayLabels=g.entries.map(e=>e.day+'요일').join(', ');
       const gTimeLabels=[...new Set(g.entries.map(e=>fmtTime(e.time)))].join(', ');
-      const gOneLiner=g.entries.map(e=>`${e.day}요일 ${fmtTime(e.time)}`).join(' / ');
-      msgs.push({label:`⑥ 강사 확정 메세지 (${g.instructor.name})`,type:'ins',to:g.instructor.name,
-        body:`수업일정 확정\n${name} ${phone}\n\n매주 주${freq}회 중 ${g.entries.length}회 담당, ${durLabel}씩\n${gDayLabels} ${gTimeLabels}\n\n수업 시작일은 ${startFmt}입니다.\n\n상세정보\n${detail||'(상세정보 없음)'}`});
+      const gStart=fmtDate(startDates[i]||startDates[0]);
+      msgs.push({label:`⑥ 강사 확정 메세지 (${g.ins.name})`,type:'ins',to:g.ins.name,
+        body:`수업일정 확정\n${name} ${phone}\n\n매주 주${freq}회 중 ${g.entries.length}회 담당, ${durLabel}씩\n${gDayLabels} ${gTimeLabels}\n\n수업 시작일은 ${gStart}입니다.\n\n상세정보\n${detail||'(상세정보 없음)'}`});
     });
   }
 
