@@ -98,6 +98,24 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
 .sec-sub{font-size:13px;color:var(--muted);margin-bottom:24px}
 .empty{text-align:center;padding:48px;color:var(--muted);font-size:14px}
 .mt16{margin-top:16px}
+.type-toggle{display:flex;gap:0;border:1.5px solid #e0e0e0;border-radius:4px;overflow:hidden;margin-top:4px}
+.type-toggle button{flex:1;padding:9px 0;border:none;background:#fff;font-size:13px;font-weight:500;cursor:pointer;font-family:'Noto Sans KR',sans-serif;color:var(--muted);transition:all .15s}
+.type-toggle button.active{background:var(--border);color:#fff}
+.checklist-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid #e0e0e0;border-radius:4px;margin-bottom:8px;cursor:pointer;font-size:14px;transition:all .15s;user-select:none}
+.checklist-item:hover{border-color:var(--accent2)}
+.checklist-item.done{background:#f0f8f0;border-color:var(--success);color:var(--muted);text-decoration:line-through}
+.checklist-item .chk{width:20px;height:20px;border:2px solid #ccc;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;transition:all .15s}
+.checklist-item.done .chk{background:var(--success);border-color:var(--success);color:#fff}
+.hotkey-box{background:#f8f8f8;border:1px solid #e0e0e0;border-radius:4px;padding:12px 16px;font-size:13px;display:flex;gap:24px;align-items:center}
+.hotkey-box .hk{display:flex;align-items:center;gap:8px}
+.hotkey-box .key{background:#fff;border:1.5px solid #ccc;border-radius:3px;padding:3px 10px;font-family:'DM Mono',monospace;font-size:13px;font-weight:600;box-shadow:0 2px 0 #ccc}
+.time-direct-input{padding:5px 8px;border:1.5px dashed #ccc;border-radius:3px;font-size:12px;font-family:'DM Mono',monospace;width:72px;outline:none;color:var(--border)}
+.time-direct-input:focus{border-color:var(--accent2)}
+.flex-time-wrap{display:flex;gap:8px;align-items:center}
+.flex-time-wrap select{flex:1}
+.flex-time-wrap input{width:90px;padding:9px 10px;border:1.5px solid #e0e0e0;border-radius:3px;font-size:13px;font-family:'DM Mono',monospace;outline:none}
+.flex-time-wrap input:focus{border-color:var(--accent2)}
+.flex-time-wrap .sep{font-size:12px;color:var(--muted);white-space:nowrap}
 </style>
 </head>
 <body>
@@ -159,6 +177,14 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
 
     <div class="card">
       <div class="card-title">수업 조건</div>
+      <div class="form-group" style="margin-bottom:20px">
+        <label>수업 유형</label>
+        <div class="type-toggle">
+          <button id="type-fixed" class="active" onclick="setLessonType('fixed')">고정식</button>
+          <button id="type-flex" onclick="setLessonType('flex')">비고정식</button>
+        </div>
+      </div>
+      <div id="fixed-fields">
       <div class="form-row col2" style="margin-bottom:20px">
         <div class="form-group">
           <label>주당 수업 횟수</label>
@@ -169,11 +195,15 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
         </div>
         <div class="form-group">
           <label>1회 수업 시간</label>
-          <select id="s-duration">
-            <option value="1" selected>1시간</option>
-            <option value="1.5">1시간 30분</option>
-            <option value="2">2시간</option>
-          </select>
+          <div class="flex-time-wrap">
+            <select id="s-duration">
+              <option value="1" selected>1시간</option>
+              <option value="1.5">1시간 30분</option>
+              <option value="2">2시간</option>
+            </select>
+            <span class="sep">또는 직접</span>
+            <input type="text" id="s-duration-direct" placeholder="예: 1.5" style="width:70px;padding:9px 10px;border:1.5px solid #e0e0e0;border-radius:3px;font-size:13px;font-family:'DM Mono',monospace;outline:none">
+          </div>
         </div>
       </div>
       <div class="form-group" style="margin-bottom:16px">
@@ -188,15 +218,15 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title">학생 상세 정보 (강사 전달용)</div>
-      <div class="form-group">
-        <label>매튜 상담 기록 (레벨 테스트 결과, 목표, 배경 등)</label>
-        <textarea id="s-detail" placeholder="예: 해운대 거주 20대 여성, 대학원 재학 중. 해외유학 고려 중이며 영어회화 실력 향상 희망..."></textarea>
+      </div><!-- /fixed-fields -->
+      <!-- 비고정식: 강사 지정 안내 -->
+      <div id="flex-fields" style="display:none">
+        <div class="notice" style="margin-top:4px">비고정식은 담당 강사를 위에서 지정해주세요. 다음 단계에서 강사의 빈 시간을 확인해 첫 수업 슬롯을 선택합니다.</div>
       </div>
     </div>
+
     <div style="display:flex;justify-content:flex-end">
-      <button class="btn btn-primary" onclick="goStep2()">일정 추천 받기 →</button>
+      <button class="btn btn-primary" id="step1-next-btn" onclick="goNextFromStep1()">일정 추천 받기 →</button>
     </div>
   </div>
 
@@ -209,6 +239,13 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
     <div class="card">
       <div class="card-title">추천 일정 <span style="font-size:12px;font-weight:400;color:var(--muted)">— 클릭해서 선택</span></div>
       <div id="slotResults"><div class="empty">계산 중...</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">학생 상세 정보 (강사 전달용)</div>
+      <div class="form-group">
+        <label>매튜 상담 기록 (레벨 테스트 결과, 목표, 배경 등)</label>
+        <textarea id="s-detail" placeholder="예: 해운대 거주 20대 여성, 대학원 재학 중. 해외유학 고려 중이며 영어회화 실력 향상 희망..."></textarea>
+      </div>
     </div>
     <div style="display:flex;justify-content:space-between;margin-top:8px">
       <button class="btn btn-ghost" onclick="setStep(1)">← 뒤로</button>
@@ -223,19 +260,55 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
       <div id="startdate-wrap"></div>
       <div class="form-group" style="margin-top:14px">
         <label>학생에게 일정 제안 방식</label>
-        <select id="s-offerChoice" onchange="generateMessages()" style="max-width:280px">
+        <select id="s-offerChoice" onchange="onOfferChoiceChange()" style="max-width:280px">
           <option value="single">단일 일정 확정 안내</option>
           <option value="multi">복수 선택지 제공</option>
         </select>
+      </div>
+      <!-- 비고정식 복수선택지: 두 번째 슬롯 -->
+      <div id="flex-multi-wrap" style="display:none;margin-top:14px">
+        <div class="form-group">
+          <label>두 번째 선택지 시각</label>
+          <div class="flex-time-wrap">
+            <select id="flex-slot2-select" onchange="syncFlexSlot2Direct()">
+              <option value="">선택</option>
+              <option value="07:00">오전 7시</option><option value="08:00">오전 8시</option>
+              <option value="09:00">오전 9시</option><option value="10:00">오전 10시</option>
+              <option value="11:00">오전 11시</option><option value="12:00">오후 12시</option>
+              <option value="13:00">오후 1시</option><option value="14:00">오후 2시</option>
+              <option value="15:00">오후 3시</option><option value="16:00">오후 4시</option>
+              <option value="17:00">오후 5시</option><option value="18:00">오후 6시</option>
+              <option value="19:00">오후 7시</option><option value="20:00">오후 8시</option>
+              <option value="21:00">오후 9시</option>
+            </select>
+            <span class="sep">또는 직접</span>
+            <input type="text" id="flex-slot2-direct" placeholder="예: 19:30" maxlength="5" oninput="syncFlexSlot2Select(this.value);generateMessages()">
+          </div>
+        </div>
       </div>
     </div>
     <div class="card">
       <div class="card-title">생성된 메세지</div>
       <div id="messagesOutput"></div>
-      <div class="notice" style="margin-top:8px">📎 다섯 번째 메세지(공통 이미지)는 카카오톡에서 별도 첨부하세요.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">출결규정 이미지 안내</div>
+      <div class="hotkey-box">
+        <div class="hk">야간팀 <span class="key">*</span></div>
+        <div style="color:#ccc">|</div>
+        <div class="hk">주간팀 <span class="key">-</span></div>
+        <div style="font-size:12px;color:var(--muted);margin-left:8px">핫키 프로그램에서 해당 키 입력 후 출결규정 이미지 첨부</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">발송 후 체크리스트</div>
+      <div class="checklist-item" id="chk0" onclick="toggleChk(0)">
+        <div class="chk" id="chkbox0"></div>
+        <span>네이버 / 구글 캘린더에 수업 일정 입력</span>
+      </div>
     </div>
     <div style="display:flex;justify-content:space-between;margin-top:8px">
-      <button class="btn btn-ghost" onclick="setStep(2)">← 뒤로</button>
+      <button class="btn btn-ghost" id="step3-back-btn" onclick="goBackFromStep3()">← 뒤로</button>
       <button class="btn btn-accent" onclick="generateMessages()">🔄 재생성</button>
     </div>
   </div>
@@ -457,7 +530,34 @@ function renderDayTimeRows(){
       chip.onclick=()=>chip.classList.toggle('on');
       chips.appendChild(chip);
     });
-    row.appendChild(lbl); row.appendChild(chips); container.appendChild(row);
+    // 직접입력 칩
+    const directInput=document.createElement('input');
+    directInput.type='text';
+    directInput.className='time-direct-input';
+    directInput.placeholder='직접입력';
+    directInput.maxLength=5;
+    directInput.title='예: 09:30';
+    directInput.dataset.day=day;
+    directInput.addEventListener('keydown',function(e){
+      if(e.key==='Enter'){
+        const val=this.value.trim();
+        if(/^\d{2}:\d{2}$/.test(val)){
+          // add as chip if not already present
+          if(!chips.querySelector(`.time-chip[data-t="${val}"]`)){
+            const chip=document.createElement('div');
+            chip.className='time-chip on';
+            chip.dataset.t=val; chip.textContent=val;
+            chip.onclick=()=>chip.classList.toggle('on');
+            chips.appendChild(chip);
+          }
+          this.value='';
+        } else {
+          this.style.borderColor='var(--danger)';
+          setTimeout(()=>this.style.borderColor='',1000);
+        }
+      }
+    });
+    row.appendChild(lbl); row.appendChild(chips); row.appendChild(directInput); container.appendChild(row);
   });
 }
 
@@ -625,6 +725,155 @@ function getCombos(arr,k){
 }
 function isConflict(insId,day,time){return isConflictICS(insId,day,time);}
 
+// ── LESSON TYPE
+let lessonType='fixed';
+function setLessonType(t){
+  lessonType=t;
+  document.getElementById('type-fixed').classList.toggle('active',t==='fixed');
+  document.getElementById('type-flex').classList.toggle('active',t==='flex');
+  document.getElementById('fixed-fields').style.display=t==='fixed'?'block':'none';
+  document.getElementById('flex-fields').style.display=t==='flex'?'block':'none';
+  const btn=document.getElementById('step1-next-btn');
+  btn.textContent='일정 추천 받기 →';
+}
+
+function getFlexTime(){
+  // 직접입력 우선, 없으면 select
+  const direct=document.getElementById('flex-time-direct');
+  const sel=document.getElementById('flex-time');
+  if(direct&&direct.value.trim()&&/^\d{2}:\d{2}$/.test(direct.value.trim()))return direct.value.trim();
+  return sel?sel.value:'';
+}
+function syncFlexTimeDirect(){
+  const sel=document.getElementById('flex-time');
+  const direct=document.getElementById('flex-time-direct');
+  if(sel&&direct&&sel.value)direct.value='';
+}
+function syncFlexTimeSelect(val){
+  if(/^\d{2}:\d{2}$/.test(val)){
+    const sel=document.getElementById('flex-time');
+    if(sel)sel.value='';
+  }
+}
+
+function onOfferChoiceChange(){
+  const choice=document.getElementById('s-offerChoice').value;
+  const flexMulti=document.getElementById('flex-multi-wrap');
+  if(flexMulti) flexMulti.style.display=(lessonType==='flex'&&choice==='multi')?'block':'none';
+  generateMessages();
+}
+function getFlexSlot1Time(){
+  const direct=document.getElementById('flex-slot1-direct');
+  const sel=document.getElementById('flex-slot1-select');
+  if(direct&&direct.value.trim()&&/^\d{2}:\d{2}$/.test(direct.value.trim()))return direct.value.trim();
+  return sel?sel.value:( selectedSlot?selectedSlot.entries[0].time:'' );
+}
+function getFlexSlot2Time(){
+  const direct=document.getElementById('flex-slot2-direct');
+  const sel=document.getElementById('flex-slot2-select');
+  if(direct&&direct.value.trim()&&/^\d{2}:\d{2}$/.test(direct.value.trim()))return direct.value.trim();
+  return sel?sel.value:'';
+}
+function syncFlexSlot1Direct(){
+  const sel=document.getElementById('flex-slot1-select');
+  const direct=document.getElementById('flex-slot1-direct');
+  if(sel&&direct&&sel.value)direct.value='';
+  generateMessages();
+}
+function syncFlexSlot1Select(val){
+  if(/^\d{2}:\d{2}$/.test(val)){const sel=document.getElementById('flex-slot1-select');if(sel)sel.value='';}
+}
+function syncFlexSlot2Direct(){
+  const sel=document.getElementById('flex-slot2-select');
+  const direct=document.getElementById('flex-slot2-direct');
+  if(sel&&direct&&sel.value)direct.value='';
+  generateMessages();
+}
+function syncFlexSlot2Select(val){
+  if(/^\d{2}:\d{2}$/.test(val)){const sel=document.getElementById('flex-slot2-select');if(sel)sel.value='';}
+}
+function goNextFromStep1(){
+  const name=document.getElementById('s-name').value.trim();
+  const phone=document.getElementById('s-phone').value.trim();
+  if(!name||!phone)return alert('학생 이름과 전화번호는 필수입니다.');
+  if(lessonType==='flex'){
+    const directIds=Array.from(document.querySelectorAll('#s-instructor-direct input:checked')).map(i=>i.value);
+    if(directIds.length===0)return alert('비고정식은 담당 강사를 지정해주세요.');
+    // 비고정식도 step2(일정추천)으로 — 주 1회, 단일 슬롯 기준
+    goStep2Flex();
+  } else {
+    const subjects=getChecked('s-subjects');
+    if(subjects.length===0)return alert('수업 과목을 1개 이상 선택해주세요.');
+    goStep2();
+  }
+}
+
+async function goStep2Flex(){
+  const name=document.getElementById('s-name').value.trim();
+  const phone=document.getElementById('s-phone').value.trim();
+  if(!name||!phone)return alert('학생 이름과 전화번호는 필수입니다.');
+  setStep(2);
+  // 비고정식 step2 안내 문구
+  document.getElementById('slotResults').innerHTML='<div class="empty">강사 캘린더 불러오는 중...</div>';
+  await prefetchAllICS();
+  const withUrls=instructors.filter(i=>i.calId).length;
+  const statusEl=document.getElementById('step2-ics-status');
+  if(withUrls>0){
+    statusEl.className='gcal-bar';
+    statusEl.style.background='#e8f5e9';statusEl.style.color='#2e7d32';
+    statusEl.innerHTML='<div class="dot" style="background:var(--success)"></div><span>'+withUrls+'명 강사 캘린더 연동됨 — 빈 시간 기준으로 추천합니다</span>';
+  } else {
+    statusEl.innerHTML='<div class="dot"></div><span>ICS 미연동 — 강사 설정 기준으로만 추천합니다</span>';
+  }
+  // 비고정식: 지정 강사, 주1회, 모든 요일/시간 후보로 계산
+  const flexSlots=computeFlexSlots();
+  renderSlotResults(flexSlots);
+}
+
+function computeFlexSlots(){
+  const directIds=Array.from(document.querySelectorAll('#s-instructor-direct input:checked')).map(i=>i.value);
+  // 비고정식: 과목 필터 없이 지정 강사의 모든 빈 슬롯
+  let cands=directIds.length>0?instructors.filter(i=>directIds.includes(i.id)):[...instructors];
+
+  const results=[];
+  cands.forEach(ins=>{
+    ins.days.forEach(day=>{
+      ins.times.forEach(time=>{
+        if(!isConflict(ins.id,day,time)){
+          results.push({entries:[{instructor:ins,day,time}],multiInstructor:false,score:10,label:day+'요일 '+fmtTime(time)});
+        }
+      });
+    });
+  });
+  // Sort by day order then time
+  const dayOrder=['월','화','수','목','금','토','일'];
+  results.sort((a,b)=>{
+    const da=dayOrder.indexOf(a.entries[0].day),db=dayOrder.indexOf(b.entries[0].day);
+    if(da!==db)return da-db;
+    return a.entries[0].time.localeCompare(b.entries[0].time);
+  });
+  return results.slice(0,30);
+}
+
+function goBackFromStep3(){
+  if(lessonType==='flex') setStep(2);
+  else setStep(2);
+}
+
+// ── CHECKLIST
+function toggleChk(i){
+  const item=document.getElementById('chk'+i);
+  const box=document.getElementById('chkbox'+i);
+  const done=item.classList.toggle('done');
+  box.textContent=done?'✓':'';
+}
+function resetChecklist(){
+  const el0=document.getElementById('chk0');
+  const b0=document.getElementById('chkbox0');
+  if(el0)el0.classList.remove('done');
+  if(b0)b0.textContent='';
+}
+
 // ── STEPS
 function setStep(n){
   [1,2,3].forEach(i=>{
@@ -658,8 +907,25 @@ async function goStep2(){
 function goStep3(){
   if(!selectedSlot)return alert('일정을 선택해주세요.');
   setStep(3);
-  renderStartDateInputs();
+  if(lessonType==='flex'){
+    const e=selectedSlot.entries[0];
+    const wrap=document.getElementById('startdate-wrap');
+    const nextMon=getNextMonStr();
+    wrap.innerHTML=
+      '<div class="form-row col2">'+
+      '<div class="form-group"><label>첫 수업 날짜 *</label><input type="date" id="s-startdate-0" value="'+nextMon+'" onchange="generateMessages()"></div>'+
+      '<div class="form-group"><label>첫 수업 시각</label>'+
+      '<div class="flex-time-wrap">'+
+      '<select id="flex-slot1-select" onchange="syncFlexSlot1Direct()"><option value="">선택</option>'+
+      ['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00'].map(t=>'<option value="'+t+'" '+( t===e.time?'selected':'' )+'>'+fmtTime(t)+'</option>').join('')+'</select>'+
+      '<span class="sep">또는 직접</span>'+
+      '<input type="text" id="flex-slot1-direct" placeholder="예: 19:30" maxlength="5" value="'+( /^\d{2}:\d{2}$/.test(e.time)?e.time:'' )+'" oninput="syncFlexSlot1Select(this.value);generateMessages()">'+
+      '</div></div></div>';
+  } else {
+    renderStartDateInputs();
+  }
   generateMessages();
+  resetChecklist();
 }
 
 // ── SLOT RESULTS
@@ -696,7 +962,7 @@ function renderSlotResults(slots){
         <div class="sm" style="display:flex;align-items:center;gap:8px;margin-top:5px">
           ${insBadge}
           ${!allSameIns?slot.entries.map(e=>`<span style="font-size:11px;color:var(--muted)">${e.day}: ${e.instructor.name.split(' ')[0]}</span>`).join(' · '):''}
-          <span style="font-size:11px;color:var(--muted)">주 ${freq}회</span>
+          <span style="font-size:11px;color:var(--muted)">${lessonType==='flex'?'비고정':'주 '+freq+'회'}</span>
         </div>
       </div>
       <div style="font-size:12px;opacity:.5;margin-left:12px">선택 →</div>`;
@@ -765,11 +1031,17 @@ function getStartDates(){
 }
 
 function generateMessages(){
+  // 비고정식 처리
+  if(lessonType==='flex'){
+    generateFlexMessages();
+    return;
+  }
   if(!selectedSlot)return;
   const name=document.getElementById('s-name').value.trim();
   const phone=document.getElementById('s-phone').value.trim();
   const freq=document.getElementById('s-freq').value;
-  const dur=document.getElementById('s-duration').value;
+  const durDirect=document.getElementById('s-duration-direct');
+  const dur=(durDirect&&durDirect.value.trim())?durDirect.value.trim():document.getElementById('s-duration').value;
   const detail=document.getElementById('s-detail').value.trim();
   const offerChoice=document.getElementById('s-offerChoice').value;
   const entries=selectedSlot.entries;
@@ -840,6 +1112,83 @@ function generateMessages(){
     b.innerHTML=`<div class="msg-header"><span>${m.label}</span><span class="msg-tag ${m.type}">→ ${m.to} (${m.type==='ins'?'강사':'학생'})</span></div><div class="msg-body" id="mb${i}">${esc(m.body)}</div><div class="msg-actions"><button class="btn-copy" id="cb${i}" onclick="copyMsg(${i})">복사</button></div>`;
     c.appendChild(b);
   });
+}
+
+function generateFlexMessages(){
+  const name=document.getElementById('s-name').value.trim();
+  const phone=document.getElementById('s-phone').value.trim();
+  const detail=document.getElementById('s-detail').value.trim();
+  const startDateEl=document.getElementById('s-startdate-0');
+  const flexDate=startDateEl?startDateEl.value:'';
+  if(!selectedSlot)return;
+  const entry=selectedSlot.entries[0];
+  const ins=entry.instructor;
+  const flexTime=getFlexSlot1Time()||entry.time;
+  const offerChoice=document.getElementById('s-offerChoice').value;
+
+  const dateFmt=fmtDate(flexDate);
+  const timeFmt=fmtTime(flexTime);
+  const msgs=[];
+
+  if(offerChoice==='single'){
+    const msg1=`신규(${name}님) 비고정 첫수업 ${dateFmt} ${timeFmt} 있습니다.`;
+    const msg3=`[수업일정 확정 안내]
+* 비고정
+첫 수업은 ${dateFmt} ${timeFmt}입니다.
+
+* 수업장소 : 라이언멤버스 교실
+벽산E오렌지프라자 5층 542호, 535호 (짐보리 옆)
+http://naver.me/GVbfXaul`;
+    const msg6=`수업일정 확정 (비고정)
+${name} ${phone}
+첫 수업: ${dateFmt} ${timeFmt}
+
+상세정보
+${detail||'(상세정보 없음)'}`;
+    msgs.push({label:'① 강사 1차 안내',type:'ins',to:ins.name,body:msg1});
+    msgs.push({label:'② 학생 확정 — 수업일정',type:'stu',to:name,body:msg3});
+  } else {
+    // 복수선택지
+    const slot2Time=getFlexSlot2Time();
+    const slot2Fmt=slot2Time?fmtTime(slot2Time):'(선택지 2 미입력)';
+    const msg1=`신규(${name}님) 비고정 첫수업 후보 ${timeFmt} / ${slot2Fmt} 있습니다.`;
+    const msg2=`일정 조율 안내드립니다 :)
+아래 중 편하신 시간 선택해 주세요!
+
+1) ${timeFmt}
+2) ${slot2Fmt}
+
+선택해 주시면 곧 선생님 정보가 포함된 안내 메세지를 드릴게요~`;
+    msgs.push({label:'① 강사 1차 안내',type:'ins',to:ins.name,body:msg1});
+    msgs.push({label:'② 학생 일정 제안',type:'stu',to:name,body:msg2});
+    // 확정 메세지는 slot1 기준으로 미리 생성
+    const msg3=`[수업일정 확정 안내]
+* 비고정
+첫 수업은 ${dateFmt} ${timeFmt}입니다.
+
+* 수업장소 : 라이언멤버스 교실
+벽산E오렌지프라자 5층 542호, 535호 (짐보리 옆)
+http://naver.me/GVbfXaul`;
+    msgs.push({label:'③ 학생 확정 — 수업일정 (학생 선택 후 발송)',type:'stu',to:name,body:msg3});
+  }
+
+  msgs.push({label:(offerChoice==='single'?'③':'④')+' 학생 확정 — 강사 프로필',type:'stu',to:name,body:ins.profile});
+  msgs.push({label:(offerChoice==='single'?'④':'⑤')+' 학생 확정 — 공통 이미지',type:'stu',to:name,body:'📎 공통 안내 이미지를 카카오톡에서 별도 첨부해주세요.'});
+  const msg6=`수업일정 확정 (비고정)
+${name} ${phone}
+첫 수업: ${dateFmt} ${timeFmt}
+
+상세정보
+${detail||'(상세정보 없음)'}`;
+  msgs.push({label:(offerChoice==='single'?'⑤':'⑥')+' 강사 확정 메세지',type:'ins',to:ins.name,body:msg6});
+
+  const c=document.getElementById('messagesOutput'); c.innerHTML='';
+  msgs.forEach((m,i)=>{
+    const b=document.createElement('div'); b.className='msg-block';
+    b.innerHTML=`<div class="msg-header"><span>${m.label}</span><span class="msg-tag ${m.type}">→ ${m.to} (${m.type==='ins'?'강사':'학생'})</span></div><div class="msg-body" id="mb${i}">${esc(m.body)}</div><div class="msg-actions"><button class="btn-copy" id="cb${i}" onclick="copyMsg(${i})">복사</button></div>`;
+    c.appendChild(b);
+  });
+  resetChecklist();
 }
 
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
