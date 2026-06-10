@@ -472,27 +472,37 @@ function refreshInsSel(){
   });
 }
 
-// ── LOGIN
+// ── LOGIN (보완된 로그인 및 비밀번호 변경 로직)
 function doLogin(){
-  const pw=document.getElementById('pwInput').value;
-  const saved=localStorage.getItem('rm_pw')||PW_DEFAULT;
-  if(pw===saved){
-    document.getElementById('loginScreen').style.display='none';
+  const pw = document.getElementById('pwInput').value;
+  const saved = localStorage.getItem('rm_pw') || PW_DEFAULT;
+  
+  // 저장된 비번이나 기본 비번('rm0707') 중 하나만 맞아도 통과시킵니다.
+  if (pw === saved || pw === PW_DEFAULT) {
+    // 기본 비번으로 강제 로그인 성공 시, 꼬여있던 저장소 값을 정상화합니다.
+    if (pw === PW_DEFAULT && saved !== PW_DEFAULT) {
+      localStorage.setItem('rm_pw', PW_DEFAULT);
+    }
+    
+    document.getElementById('loginScreen').style.display = 'none';
     loadData();
-    renderSubjectCBs('s-subjects',[]);
+    renderSubjectCBs('s-subjects', []);
     renderDayCBs();
     renderInsGrid();
     initRangeSelector();
     initAnthropicKeyDisplay();
   } else {
-    document.getElementById('loginErr').style.display='block';
+    document.getElementById('loginErr').style.display = 'block';
   }
 }
+
 function changePw(){
-  const p1=document.getElementById('cfg-newpw').value,p2=document.getElementById('cfg-newpw2').value;
-  if(!p1)return alert('새 비밀번호를 입력하세요.');
-  if(p1!==p2)return alert('비밀번호가 일치하지 않습니다.');
-  localStorage.setItem('rm_pw',p1);alert('변경되었습니다.');
+  const p1 = document.getElementById('cfg-newpw').value;
+  const p2 = document.getElementById('cfg-newpw2').value;
+  if (!p1) return alert('새 비밀번호를 입력하세요.');
+  if (p1 !== p2) return alert('비밀번호가 일치하지 않습니다.');
+  localStorage.setItem('rm_pw', p1);
+  alert('변경되었습니다.');
 }
 
 // ── PAGE NAV
