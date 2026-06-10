@@ -116,6 +116,15 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
 .flex-time-wrap input{width:90px;padding:9px 10px;border:1.5px solid #e0e0e0;border-radius:3px;font-size:13px;font-family:'DM Mono',monospace;outline:none}
 .flex-time-wrap input:focus{border-color:var(--accent2)}
 .flex-time-wrap .sep{font-size:12px;color:var(--muted);white-space:nowrap}
+.ai-upload-area{border:2px dashed #ccc;border-radius:6px;padding:24px;text-align:center;cursor:pointer;transition:all .2s;background:#fafafa}
+.ai-upload-area:hover,.ai-upload-area.drag{border-color:var(--accent2);background:#f0f5f5}
+.ai-upload-area input{display:none}
+.ai-result-slot{display:flex;align-items:center;gap:8px;padding:7px 12px;border:1.5px solid #e0e0e0;border-radius:4px;margin-bottom:6px;cursor:pointer;font-size:13px;transition:all .15s}
+.ai-result-slot:hover{border-color:var(--accent2);background:#f0f5f5}
+.ai-result-slot.picked{background:var(--border);color:#fff;border-color:var(--border)}
+.range-select{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.range-btn{padding:5px 14px;border:1.5px solid #e0e0e0;border-radius:20px;font-size:12px;cursor:pointer;background:#fff;font-family:inherit;transition:all .15s}
+.range-btn.active{background:var(--border);color:#fff;border-color:var(--border)}
 </style>
 </head>
 <body>
@@ -237,6 +246,19 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
       <div id="step2-ics-status" class="gcal-bar"><div class="dot"></div><span>ICS 불러오는 중...</span></div>
     </div>
     <div class="card">
+      <div class="card-title">📸 캘린더 스크린샷 AI 분석 <span style="font-size:11px;font-weight:400;color:var(--muted)">— 선택사항</span></div>
+      <div class="notice">구글/네이버 캘린더 화면을 캡처해서 업로드하면 AI가 빈 시간을 분석해 추천 슬롯에 추가합니다.</div>
+      <div class="ai-upload-area" id="aiUploadArea" onclick="document.getElementById('aiImgInput').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleAIDrop(event)">
+        <input type="file" id="aiImgInput" accept="image/*" multiple onchange="handleAIUploadMulti(this.files)">
+        <div id="aiUploadLabel" style="color:var(--muted);font-size:14px">🖼 클릭하거나 이미지를 드래그 (1~3장, 여러 주차 가능)</div>
+      </div>
+      <div id="aiPreviewList" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"></div>
+      <div id="aiAnalysisResult" style="margin-top:14px;display:none">
+        <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">AI 분석 결과 — 클릭해서 추천에 추가</div>
+        <div id="aiSlotList"></div>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-title">추천 일정 <span style="font-size:12px;font-weight:400;color:var(--muted)">— 클릭해서 선택</span></div>
       <div id="slotResults"><div class="empty">계산 중...</div></div>
     </div>
@@ -326,11 +348,34 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
   <div class="sec-title">설정</div>
   <div class="sec-sub">구글 캘린더 연동 및 앱 설정</div>
   <div class="card">
+    <div class="card-title">🤖 AI 분석 — Anthropic API Key</div>
+    <div class="notice">캘린더 스크린샷 AI 분석 기능을 사용하려면 Anthropic API Key가 필요합니다.<br>발급: <b>console.anthropic.com</b> → API Keys → Create</div>
+    <div class="form-row col2" style="margin-top:12px">
+      <div class="form-group">
+        <label>Anthropic API Key</label>
+        <input type="password" id="cfg-anthropic-key" placeholder="sk-ant-..." autocomplete="off">
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+      <button class="btn btn-primary btn-sm" onclick="saveAnthropicKey()">저장</button>
+      <span id="anthropic-key-status" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+  </div>
+  <div class="card">
     <div class="card-title">캘린더 연동 안내</div>
     <div class="notice">강사별 ICS URL은 <b>강사 설정 탭 → 편집 → 아웃룩 ICS URL</b> 에 입력하세요.</div>
     <div style="font-size:13px;color:var(--muted);line-height:1.8">입력 후 일정 추천 시 해당 강사의 기존 수업을 자동으로 읽어 빈 시간만 추천합니다.</div>
     <div id="ics-status" style="margin-top:16px"></div>
     <button class="btn btn-accent mt16" onclick="testAllICS()">전체 강사 ICS 연결 테스트</button>
+  </div>
+  <div class="card">
+    <div class="card-title">일정 확인 날짜 범위</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:10px">ICS 충돌 감지 시 오늘 기준 앞뒤 몇 주를 볼지 설정합니다. 임시 수업이 잦으면 넓게 설정하세요.</div>
+    <div class="form-group">
+      <label>확인 범위 (오늘 기준 전후 각각)</label>
+      <div class="range-select" id="rangeSelector"></div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">현재: <span id="rangeSummary" style="font-weight:600;color:var(--border)">전후 2주</span></div>
   </div>
   <div class="card">
     <div class="card-title">비밀번호 변경</div>
@@ -386,22 +431,22 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
 const PW_DEFAULT='rm2024';
 const TIMES=['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00'];
 const DAYS=['월','화','수','목','금','토','일'];
-const SUBJECTS=['스몰톡(사교영어)','여행영어','TED','토플','아이엘츠','오픽','토스','키즈','영어면접','교수임용'];
+const SUBJECTS=['스몰톡(사교영어)','스몰톡 프로(TED)','여행영어','비지니스','영어면접','교수임용','토플','아이엘츠','오픽','토스','토익','키즈'];
 
 let instructors=[], selectedSlot=null;
 
 const DEFAULTS=[
-{id:'matthew',name:'Matthew Moon',days:['월','화','수','목','금'],times:['10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'],subjects:['스몰톡(사교영어)','여행영어','영어면접','교수임용','TED'],maxConsec:4,calId:'',
+{id:'matthew',name:'Matthew Moon',days:['월','화','수','목','금'],times:['10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'],subjects:['스몰톡(사교영어)','스몰톡 프로(TED)','여행영어','비지니스','영어면접','교수임용'],maxConsec:4,calId:'',
 profile:`담당파트너\nMatthew Moon. 매튜 문. 한국계 캐나다인.\ncontact. 010-4511-0215\n\n- RM 마린시티의 원장\n- 국제물류협회 김병진 회장(FIATA) 개인교육 전담교사\n- 국제물류협회 스피치 순차통역 및 VIP통역 관리자\n- 창신INC CFO(부사장) 개인교육 전담교사\n- 해운대 아쿠아리움(외국계) 임직원 개인교육\n- 인터락코리아 임직원 개인교육\n- 말랑하니 기업체강의 임직원 집단교육\n- 영어면접강의 전담(창신, 태광, 이화다이아몬드, 삼성전자 인도지사 회계 매니저 이직, PRA 헬스사이언스, 한국 알콘, 호주 대사관 등 입사성공 경력 다수)\n- 교수임용 영어강의교육 전담\nGeorge Brown College Hotel Management 전공. RM 와인 클래스, 해외여행, 사교영어, cuisine culture 관련과목\n이색경력은 재학시 캐나다에서의 직업 트레이너 경력. 캐나다 토론토 지역 바디빌딩 대회에서 4위 입상. 호텔에서 4년 근무경험.\n자유로운 영혼. 할리데이빗슨을 즐겨타며 바이크 캠핑을 좋아함.\n부전공으로 소믈리에. 지인들과 와인테이스팅을 좋아하며, 처음만난 사람과 금방 친해지는 분위기 메이커.\n"Trust me. Follow me. You will be there!"`},
-{id:'paul',name:'Paul Oh',days:['월','화','수','목','금'],times:['10:00','11:00','12:00','13:00','14:00','15:00','16:00'],subjects:['스몰톡(사교영어)','여행영어','영어면접'],maxConsec:4,calId:'',
+{id:'paul',name:'Paul Oh',days:['월','화','수','목','금'],times:['10:00','11:00','12:00','13:00','14:00','15:00','16:00'],subjects:['스몰톡(사교영어)','여행영어','비지니스','영어면접'],maxConsec:4,calId:'',
 profile:`담당파트너\nPaul Oh\nContact. 010-2151-9545\n\n미국 (중,고등, 대학교 졸업) 약 12년\n고등학교 : South Kent Prep\n대학교 : University of Massachusetts-Boston\n경력 : Finance(전공)\n취미 : 운동\n좋아하는 영화 : 스릴러\n좋아하는 날씨 : LA처럼 16-18도의 선선한 햇살 좋은 날씨\n좋아하는 운동 : 테니스, 축구\n좋아하는 명언 : DFQ (Don't Quit)\n\n저는 한국에서 초등학교 졸업 후 미국으로 건너가 보딩스쿨을 다니고 대학교에서 finance를 전공으로 졸업하고 한국으로 넘어왔어요 :) 요즘은 시간 날 때마다 취미로 테니스를 즐겨 합니다! 노래는 90년대 노래를 좋아해요ㅎㅎ 그리고 LA를 몇 번 방문한 적 있는데 갈 때마다 날씨가 너무 좋아서 저는 그런 도시에 살고 싶어요. 16-18도의 선선한 공기와 무덥지 않은 햇살 좋은 날씨 있죠? :) 그리고 한번씩 쉬고 싶을때는 OTT에서 스릴러 위주로 시청을 한답니다. 아, 그리고 가장 좋아하는 활동이 있어요. 저는 맛있는 음식을 먹는 걸 아주 소중하게 생각해요. 맛있는 음식과 술의 조합은 소소하지만 가장 큰 행복! 마지막으로 저의 좌우명은 "DFQ" / Don't Quit! 절대 포기하지말고 끝까지 해버리기! 최근들어 저 스스로에게 많이 해주는 말입니다. :)`},
-{id:'david',name:'David Park',days:['월','화','수','목','금'],times:['10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'],subjects:['스몰톡(사교영어)','여행영어','TED'],maxConsec:4,calId:'',
+{id:'david',name:'David Park',days:['월','화','수','목','금'],times:['10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'],subjects:['스몰톡(사교영어)','스몰톡 프로(TED)','여행영어','비지니스'],maxConsec:4,calId:'',
 profile:`담당파트너\nDavid Park\nContact. 010-5469-8457\n\nU.S. 16년 거주\nNorthern Illinois University, U.S.에서\nAthletic Training (선수 트레이닝) 학사\nExercise Physiology (운동 생리학) 석사\nSport and Exercise Psychology (운동 심리학) 석사\nSport Nutrition (운동 영양학) 석사 부전공\n미국 현지인급:\n-사교 회화\n-발음과 억양 교정\n미국 고등교육급:\n-격식체 회화(고급 문체와 어휘) 교육\n-에세이 교정\n\n노래 듣는 것과 만화 읽는 걸 좋아해요. 얇은 긴팔 긴 바지 입기 딱 좋은 시원한 봄 날씨 저녁시간 때 차가운 커피를 마시며 기분에 맞는 음악을 들으면서 집 근처 골목을 걷는 걸 좋아해요. 제가 고등학생일 때 역사 선생님이 하신 말씀 중에 "It's not weird; it's just different"라는 말씀이 있는데 "이상한 게 아니라 그냥 다른 거다"라는 뜻인데 삶을 바라보고 대하는 관점을 크게 바꿔줬어요.`},
-{id:'jenna',name:'Jenna Kim',days:['월','화','수','목','금'],times:['10:00','11:00','12:00','13:00','14:00','15:00','16:00'],subjects:['스몰톡(사교영어)','오픽','토플','토스','아이엘츠'],maxConsec:4,calId:'',
+{id:'jenna',name:'Jenna Kim',days:['월','화','수','목','금'],times:['10:00','11:00','12:00','13:00','14:00','15:00','16:00'],subjects:['스몰톡(사교영어)','여행영어','토플','아이엘츠','오픽','토스','토익'],maxConsec:4,calId:'',
 profile:`담당파트너\nJenna Kim\nContact. 010-3630-3223\n\nCanada, US, UK, Dubai (14년)\nAurora High School\nParsons the New School for Design\n(Fashion design and Management 전공)\n- 발음과 억양 교정\n- 수준 별 사교 회화\n- 문법 및 작문\n- 에세이 교정\n- OPIC, TOEIC, TOEFL\n\n제가 가장 좋아하는 노래는 Kings of Convenience의 Misread, 좋아하는 show는 BigBang Theory 입니다. 디자인 전공자로 아트&패션 을 오래 공부 했어요. 그래서 전시 보는 것도 좋아해요. 강아지를 키우고 있고, 같이 운동하고 해변가를 산책하는 것을 좋아합니다.\n나이키의 슬로건인 Just do it이 저의 좌우명 입니다.`},
-{id:'campbell',name:'Campbell Soutter',days:['월','화','수','목','금'],times:['10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'],subjects:['스몰톡(사교영어)','TED','아이엘츠','토플'],maxConsec:4,calId:'',
+{id:'campbell',name:'Campbell Soutter',days:['월','화','수','목','금'],times:['10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'],subjects:['스몰톡(사교영어)','스몰톡 프로(TED)','아이엘츠','토플'],maxConsec:4,calId:'',
 profile:`담당파트너\nCampbell Soutter 캠벨, 캐나다인\n(캐나다인 아버지와 한국인 어머니)\nContact. 010-7265-2088\n\n캐나다와 영국 6년, 12개 국가 여행\nUniversity of Toronto, H.B.A Philosophy, Dean's list graduate\n\n1. 수준별 사교영어회화\n2. 발음과 억양 교정\n3. 고급 어휘 및 고급 writing (철학 전공으로 논리 및 인문학 중심의 고급 라이팅), 최고수준의 논문 작성\n\n철학분야에서의 독서와 논문 쓰기를 좋아합니다. 노래하는 것과 음악을 들으면서 즐기는 러닝이 취미입니다. 좋아하는 음악은 클래식에서 댄스까지 다양한 음악을 선호합니다. 캐나다에서는 겨울을 좋아하지만, 한국에서는 여름이 제일 좋아한답니다.\n\n"No man's knowledge here can go beyond his experience" - John Locke.\n\n우리가 아는 것은 경험에서 비롯됩니다. 영어라는 언어도, 틀리고 고치고 배우고 연습하고 실습하는 과정이 온전히 필요하며 저와 함께 이것을 해나가도록 해봅시다!`},
-{id:'dean',name:'Dean Jeong',days:['월','화','수','목','금'],times:['10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'],subjects:['아이엘츠','TED','영어면접','교수임용','오픽'],maxConsec:4,calId:'',
+{id:'dean',name:'Dean Jeong',days:['월','화','수','목','금'],times:['10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'],subjects:['스몰톡 프로(TED)','아이엘츠','영어면접','교수임용','오픽'],maxConsec:4,calId:'',
 profile:`담당파트너\nDean Jeong\n- 격식체를 사용하는 고급영어, 중급불어가 가능한 3개국어 사용자\n- '제12회 FIATA 국제물류협회 국제회의' 1인 통역관\n- 부산대 국제학 전공. 호주 타즈매니아 UTAS. 동시 & 순차통역 및 번역 경력 다수. 해군 통역병 근무.\n- 프랑스 Grenoble Ecole de Management 에서 Masters of International Business 석사\n- IELTS 스피킹 & 롸이팅 교육 전담\n- RM의 토론 및 스피치 교재(Smalltalk Pro) 개발자 및 교육 전담\n- 에세이 롸이팅 교육 및 모든 영어 작문 교정\n- 교수임용 영어강의, 영어발표, 영어면접 담당자\n- 한수원 원격(온라인) 1:1교육 담당자\n\n평소에 새로운 것에 도전하는 걸 좋아해 운동을 즐겨합니다. 러닝, 수영, 캠핑, 여행 등 아웃도어 액티비티를 즐겨요. 100킬로 마라톤 완주경력.\nDouglas Kennedy의 The Moment라는 책을 가장 좋아합니다. 영화 인터스텔라, 다크나이트, 127hours를 감명깊게 보았어요.\n\n"Don't let life craft you. 삶이 당신을 만들게 두지 마세요. 저와 함께 멋진 삶을 만들어나가요!"\n\nContact. 스카이프ID\nyoungsujungdean@gmail.com\n카카오톡ID voyage123`}
 ];
 
@@ -437,6 +482,8 @@ function doLogin(){
     renderSubjectCBs('s-subjects',[]);
     renderDayCBs();
     renderInsGrid();
+    initRangeSelector();
+    initAnthropicKeyDisplay();
   } else {
     document.getElementById('loginErr').style.display='block';
   }
@@ -681,23 +728,61 @@ function computeSlots(){
     if(seen.has(k))return false; seen.add(k); return true;
   });
 
-  // ── Score
+  // ── Score (연강 최적화 반영)
   results.forEach(r=>{
     const allSameTime=new Set(r.entries.map(e=>e.time)).size===1;
     const allSameIns=new Set(r.entries.map(e=>e.instructor.id)).size===1;
     let score=0;
-    if(allSameIns) score+=10;          // same instructor = top
-    if(allSameTime) score+=3;           // same time bonus
-    r.score=score;
-    r.label=r.entries.map(e=>`${e.day}요일 ${fmtTime(e.time)}`).join(' / ');
-    // instructor label
+    if(allSameIns) score+=10;
+    if(allSameTime) score+=2;
+
     if(allSameIns){
-      r.insLabel=r.entries[0].instructor.name;
+      const ins=r.entries[0].instructor;
+      const cache=icsCache[ins.id];
+      if(cache&&cache.slots&&cache.slots.length>0){
+        // 각 entry에 대해 연강 점수 계산
+        r.entries.forEach(entry=>{
+          const dow=DAY_KO.indexOf(entry.day);
+          const h=parseInt(entry.time.split(':')[0]);
+          const maxC=ins.maxConsec||4;
+
+          // 같은 요일 기존 수업 목록
+          const sameDay=cache.slots.filter(s=>s.dow===dow);
+          if(sameDay.length>0){
+            score+=5; // 기존 수업 있는 날에 배치 — 최우선
+            // 바로 이전 시간(연강 직접 연결)
+            const rightBefore=sameDay.some(s=>s.hour===h-1);
+            const rightAfter=sameDay.some(s=>s.hour===h+1);
+            if(rightBefore||rightAfter) score+=3; // 완전 연강
+            // 연강 한도 초과 여부 체크
+            // 새 슬롯 포함해서 연속 시간 계산
+            const hours=[...sameDay.map(s=>s.hour),h].sort((a,b)=>a-b);
+            let maxRun=1,run=1;
+            for(let i=1;i<hours.length;i++){
+              if(hours[i]-hours[i-1]===1){run++;maxRun=Math.max(maxRun,run);}
+              else run=1;
+            }
+            if(maxRun>maxC) score-=100; // maxConsec 초과 → 사실상 제외
+            // 공백 패널티
+            const minGap=sameDay.reduce((min,s)=>Math.min(min,Math.abs(s.hour-h)),999);
+            if(minGap===2) score-=1;
+            if(minGap>=3) score-=3;
+          } else {
+            score-=2; // 기존 수업 없는 새 요일 배치 — 불리
+          }
+        });
+      }
+      r.insLabel=ins.name;
     } else {
       const parts=r.entries.map(e=>`${e.day}: ${e.instructor.name.split(' ')[0]}`);
       r.insLabel=parts.join(' / ');
     }
+    r.score=score;
+    r.label=r.entries.map(e=>`${e.day}요일 ${fmtTime(e.time)}`).join(' / ');
   });
+
+  // maxConsec 초과 제거
+  results=results.filter(r=>r.score>-50);
 
   // Split and cap separately so multi-instructor results always appear
   const single=results.filter(r=>!r.multiInstructor).sort((a,b)=>b.score-a.score).slice(0,20);
@@ -950,8 +1035,28 @@ function renderSlotResults(slots){
 
     const allSameIns=new Set(slot.entries.map(e=>e.instructor.id)).size===1;
     const insIcon=allSameIns?'👤':'👥';
+    // 연강 여부 판별
+    let connectBadge='';
+    if(allSameIns){
+      const ins=slot.entries[0].instructor;
+      const cache=icsCache[ins.id];
+      if(cache&&cache.slots&&cache.slots.length>0){
+        const hasAdjacentAll=slot.entries.every(entry=>{
+          const dow=DAY_KO.indexOf(entry.day);
+          const h=parseInt(entry.time.split(':')[0]);
+          const sameDay=cache.slots.filter(s=>s.dow===dow);
+          return sameDay.some(s=>Math.abs(s.hour-h)<=1);
+        });
+        const hasSameDayAll=slot.entries.every(entry=>{
+          const dow=DAY_KO.indexOf(entry.day);
+          return cache.slots.some(s=>s.dow===dow);
+        });
+        if(hasAdjacentAll) connectBadge='<span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px;margin-left:4px">🔗 연강</span>';
+        else if(hasSameDayAll) connectBadge='<span style="background:#fff8e1;color:#856400;padding:2px 8px;border-radius:10px;font-size:11px;margin-left:4px">📅 기존 수업날</span>';
+      }
+    }
     const insBadge=allSameIns
-      ?`<span style="background:var(--accent);padding:2px 8px;border-radius:10px;font-size:11px">${slot.entries[0].instructor.name}</span>`
+      ?`<span style="background:var(--accent);padding:2px 8px;border-radius:10px;font-size:11px">${slot.entries[0].instructor.name}</span>${connectBadge}`
       :`<span style="background:#ffeaa0;color:#856400;padding:2px 8px;border-radius:10px;font-size:11px">복수강사</span>`;
 
     const div=document.createElement('div');
@@ -1150,12 +1255,15 @@ ${detail||'(상세정보 없음)'}`;
   } else {
     // 복수선택지
     const slot2Time=getFlexSlot2Time();
-    const slot2Fmt=slot2Time?fmtTime(slot2Time):'(선택지 2 미입력)';
-    const msg1=`신규(${name}님) 비고정 첫수업 후보 ${timeFmt} / ${slot2Fmt} 있습니다.`;
+    const slot2DateEl=document.getElementById('flex-slot2-date');
+    const slot2Date=slot2DateEl?slot2DateEl.value:'';
+    const slot2DateFmt=slot2Date?fmtDate(slot2Date):'';
+    const slot2Fmt=slot2Time?(slot2DateFmt?slot2DateFmt+' '+fmtTime(slot2Time):fmtTime(slot2Time)):'(선택지 2 미입력)';
+    const msg1=`신규(${name}님) 비고정 첫수업 후보 ${dateFmt} ${timeFmt} / ${slot2Fmt} 있습니다.`;
     const msg2=`일정 조율 안내드립니다 :)
 아래 중 편하신 시간 선택해 주세요!
 
-1) ${timeFmt}
+1) ${dateFmt} ${timeFmt}
 2) ${slot2Fmt}
 
 선택해 주시면 곧 선생님 정보가 포함된 안내 메세지를 드릴게요~`;
@@ -1247,6 +1355,29 @@ function saveInstructor(){
 const icsCache={};
 const DAY_KO=['일','월','화','수','목','금','토'];
 const RRULE_DAY_MAP={SU:0,MO:1,TU:2,WE:3,TH:4,FR:5,SA:6};
+let icsRangeWeeks=parseInt(localStorage.getItem('rm_ics_range')||'2');
+function setIcsRange(w){
+  icsRangeWeeks=w;
+  localStorage.setItem('rm_ics_range',String(w));
+  document.querySelectorAll('.range-btn').forEach(b=>b.classList.toggle('active',+b.dataset.w===w));
+  const el=document.getElementById('rangeSummary');
+  if(el)el.textContent='전후 '+w+'주';
+  Object.keys(icsCache).forEach(k=>delete icsCache[k]);
+}
+function initRangeSelector(){
+  const el=document.getElementById('rangeSelector');
+  if(!el)return;
+  el.innerHTML='';
+  [1,2,3,4,5,6].forEach(w=>{
+    const btn=document.createElement('button');
+    btn.className='range-btn'+(icsRangeWeeks===w?' active':'');
+    btn.dataset.w=w; btn.textContent=w+'주';
+    btn.onclick=()=>setIcsRange(w);
+    el.appendChild(btn);
+  });
+  const el2=document.getElementById('rangeSummary');
+  if(el2)el2.textContent='전후 '+icsRangeWeeks+'주';
+}
 
 // ICS 날짜 파싱 — TZID 포함/UTC/로컬 모두 처리
 function parseICSDate(s,tzid){
@@ -1266,53 +1397,61 @@ function parseICSDate(s,tzid){
   return new Date(y,mo,d,h,mi);
 }
 
-// ICS 텍스트 파싱 — 단일 이벤트 + RRULE 주간반복 모두 처리
+// ICS 텍스트 파싱 — 날짜 범위 필터 + RRULE 주간반복 처리
 function parseICS(text){
-  // unfold folded lines (lines starting with space/tab are continuations)
+  // unfold folded lines
   text=text.replace(/\r\n[ \t]/g,'').replace(/\r/g,'');
-  const slots=[]; // {dayOfWeek:0-6, hour:0-23} — 충돌 체크용
-
+  const now=new Date(); now.setHours(0,0,0,0);
+  const rangeMs=icsRangeWeeks*7*24*3600*1000;
+  const rangeStart=new Date(now.getTime()-rangeMs);
+  const rangeEnd=new Date(now.getTime()+rangeMs);
+  const slots=[];
   const blocks=text.split('BEGIN:VEVENT');
   blocks.slice(1).forEach(block=>{
     const endIdx=block.indexOf('END:VEVENT');
     if(endIdx>-1)block=block.slice(0,endIdx);
-
     const getVal=(key)=>{
-      const m=block.match(new RegExp(key+'(?:;[^:]*)?:([^\n]+)'));
+      const pat=new RegExp(key+'(?:;[^:]*)?:([^\\n]+)');
+      const m=block.match(pat);
       return m?m[1].trim():'';
     };
     const getTZID=(key)=>{
-      const m=block.match(new RegExp(key+';TZID=([^:]+):([^\n]+)'));
+      const pat=new RegExp(key+';TZID=([^:]+):([^\\n]+)');
+      const m=block.match(pat);
       return m?{tzid:m[1].trim(),val:m[2].trim()}:null;
     };
-
-    // Parse DTSTART
     let dtStart=null;
     const tzStart=getTZID('DTSTART');
     if(tzStart) dtStart=parseICSDate(tzStart.val,tzStart.tzid);
-    else { const v=getVal('DTSTART'); if(v)dtStart=parseICSDate(v,''); }
+    else{const v=getVal('DTSTART');if(v)dtStart=parseICSDate(v,'');}
     if(!dtStart)return;
-
     const rrule=getVal('RRULE');
-
     if(rrule&&rrule.includes('FREQ=WEEKLY')){
-      // 주간 반복 — BYDAY로 요일 추출
-      const bydayM=rrule.match(/BYDAY=([^;\n]+)/);
-      const days=bydayM?bydayM[1].split(',').map(d=>d.trim().replace(/^[-+]?\d*/,'')):
-        [['SU','MO','TU','WE','TH','FR','SA'][dtStart.getDay()]];
+      const bydayM=rrule.match(/BYDAY=([^;]+)/);
+      const byDays=bydayM
+        ?bydayM[1].split(',').map(d=>d.trim().replace(/^[-+]?\d*/,''))
+        :[['SU','MO','TU','WE','TH','FR','SA'][dtStart.getDay()]];
       const hour=dtStart.getHours();
-      days.forEach(d=>{
-        const dow=RRULE_DAY_MAP[d];
-        if(dow!==undefined) slots.push({dow,hour});
+      let untilDate=new Date(rangeEnd);
+      const untilM=rrule.match(/UNTIL=([^;]+)/);
+      if(untilM){const u=parseICSDate(untilM[1].trim(),'');if(u&&u<untilDate)untilDate=u;}
+      byDays.forEach(dayCode=>{
+        const dow=RRULE_DAY_MAP[dayCode];
+        if(dow===undefined)return;
+        let cur=new Date(rangeStart);
+        while(cur.getDay()!==dow)cur.setDate(cur.getDate()+1);
+        while(cur<=untilDate){
+          if(cur>=dtStart)slots.push({dow,hour,dateStr:cur.toISOString().slice(0,10)});
+          cur=new Date(cur);cur.setDate(cur.getDate()+7);
+        }
       });
     } else {
-      // 단일 이벤트
-      slots.push({dow:dtStart.getDay(), hour:dtStart.getHours()});
+      if(dtStart>=rangeStart&&dtStart<=rangeEnd)
+        slots.push({dow:dtStart.getDay(),hour:dtStart.getHours(),dateStr:dtStart.toISOString().slice(0,10)});
     }
   });
   return slots;
 }
-
 function isConflictICS(insId,day,time){
   const cache=icsCache[insId];
   if(!cache||!cache.slots||!cache.slots.length)return false;
@@ -1375,12 +1514,137 @@ async function testAllICS(){
   statusEl.innerHTML=results.map(r=>r.value||r.reason).join('');
 }
 
-// ── SETTINGS
-function saveGCalConfig(){
-  localStorage.setItem('rm_gcal_apikey',document.getElementById('cfg-apikey').value.trim());
-  localStorage.setItem('rm_gcal_clientid',document.getElementById('cfg-clientid').value.trim());
-  alert('저장되었습니다.');
+// ── AI CALENDAR ANALYSIS
+function getAnthropicKey(){
+  return localStorage.getItem('rm_anthropic_key')||'';
 }
+function saveAnthropicKey(){
+  const key=document.getElementById('cfg-anthropic-key').value.trim();
+  if(!key){alert('API Key를 입력해주세요.');return;}
+  if(!key.startsWith('sk-ant-')){alert('올바른 Anthropic API Key 형식이 아닙니다. sk-ant- 로 시작해야 합니다.');return;}
+  localStorage.setItem('rm_anthropic_key',key);
+  const st=document.getElementById('anthropic-key-status');
+  st.textContent='✅ 저장됨 ('+key.slice(0,12)+'***)';
+  st.style.color='var(--success)';
+}
+function initAnthropicKeyDisplay(){
+  const key=getAnthropicKey();
+  if(key){
+    const inp=document.getElementById('cfg-anthropic-key');
+    if(inp)inp.placeholder=key.slice(0,12)+'*** (저장됨)';
+    const st=document.getElementById('anthropic-key-status');
+    if(st){st.textContent='✅ API Key 저장됨';st.style.color='var(--success)';}
+  }
+}
+
+async function handleAIUploadMulti(files){
+  if(!files||files.length===0)return;
+  const key=getAnthropicKey();
+  if(!key){
+    alert('설정 탭에서 Anthropic API Key를 먼저 입력해주세요.');
+    return;
+  }
+  const label=document.getElementById('aiUploadLabel');
+  const previewList=document.getElementById('aiPreviewList');
+  label.textContent='⏳ '+files.length+'장 이미지 AI 분석 중...';
+  previewList.innerHTML='';
+
+  // Show previews
+  Array.from(files).forEach((file,i)=>{
+    const img=document.createElement('img');
+    img.style.cssText='width:80px;height:60px;object-fit:cover;border-radius:4px;border:1.5px solid #e0e0e0';
+    const url=URL.createObjectURL(file);
+    img.src=url;
+    img.title=file.name;
+    previewList.appendChild(img);
+  });
+
+  try{
+    // Build content array: all images + instruction
+    const contentArr=[];
+    for(const file of Array.from(files)){
+      const b64=await fileToBase64(file);
+      contentArr.push({type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:b64}});
+    }
+    contentArr.push({type:'text',text:'위 캘린더 이미지(1~3장)에서 수업이 없는 빈 시간대를 찾아주세요. 이미지에 날짜가 보이면 날짜도 함께 추출하세요. 여러 주차 이미지라면 각 날짜별로 빈 시간을 추출하세요. 반드시 아래 JSON 형식만 출력하세요. 다른 텍스트 없이. {"slots":[{"date":"2026-06-02","day":"월","time":"10:00"}]} date는 YYYY-MM-DD 형식(날짜가 보이면), day는 월화수목금토일 중 하나, time은 HH:MM 24시간 형식. 수업이 있는 시간은 제외하고 비어있는 시간대만 포함하세요.'});
+
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:contentArr}]})
+    });
+    const data=await resp.json();
+    if(data.error){throw new Error(data.error.message);}
+    const text=data.content?.find(c=>c.type==='text')?.text||'';
+    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+    renderAISlots(parsed.slots||[]);
+  }catch(e){
+    console.error(e);
+    label.textContent='❌ 분석 실패: '+(e.message||'다시 시도해주세요.');
+  }
+}
+
+function handleAIDrop(e){
+  e.preventDefault();
+  document.getElementById('aiUploadArea').classList.remove('drag');
+  const files=e.dataTransfer.files;
+  if(files&&files.length>0)handleAIUploadMulti(files);
+}
+function fileToBase64(file){
+  return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
+}
+function renderAISlots(slots){
+  const el=document.getElementById('aiSlotList');
+  const wrap=document.getElementById('aiAnalysisResult');
+  const label=document.getElementById('aiUploadLabel');
+  wrap.style.display=slots.length?'block':'none';
+  if(!slots.length){label.textContent='빈 시간을 찾지 못했습니다.';return;}
+  label.textContent='✅ '+slots.length+'개 빈 시간 감지됨 — 클릭해서 추천에 추가';
+  el.innerHTML='';
+  // Group by date if available
+  const byDate={};
+  slots.forEach(s=>{
+    const key=s.date||'날짜 미확인';
+    if(!byDate[key])byDate[key]=[];
+    byDate[key].push(s);
+  });
+  Object.entries(byDate).forEach(([dateKey,dateSlots])=>{
+    if(dateKey!=='날짜 미확인'){
+      const hdr=document.createElement('div');
+      hdr.style.cssText='font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 4px;padding-left:2px';
+      hdr.textContent=fmtDate(dateKey)+' ('+dateSlots[0].day+'요일)';
+      el.appendChild(hdr);
+    }
+    dateSlots.forEach(s=>{
+      const div=document.createElement('div');
+      div.className='ai-result-slot';
+      const dateLabel=s.date?fmtDate(s.date)+' ':'';
+      div.innerHTML='<span>🤖</span><span><b>'+dateLabel+s.day+'요일 '+fmtTime(s.time)+'</b></span><span style="font-size:11px;color:inherit;opacity:.6;margin-left:auto">클릭해서 추가</span>';
+      div.onclick=()=>{div.classList.toggle('picked');injectAISlot(s,div.classList.contains('picked'));};
+      el.appendChild(div);
+    });
+  });
+}
+function injectAISlot(s,add){
+  const directIds=Array.from(document.querySelectorAll('#s-instructor-direct input:checked')).map(i=>i.value);
+  const ins=directIds.length>0?instructors.find(i=>i.id===directIds[0]):instructors[0];
+  if(!ins)return;
+  const synSlot={entries:[{instructor:ins,day:s.day,time:s.time}],multiInstructor:false,score:15,label:s.day+'요일 '+fmtTime(s.time)+' (AI)',aiSuggested:true};
+  const container=document.getElementById('slotResults');
+  const eid='ai-'+s.day+'-'+s.time.replace(':','-');
+  if(add){
+    if(container.querySelector('#'+eid))return;
+    const div=document.createElement('div');div.className='slot-result';div.id=eid;
+    const freq=lessonType==='flex'?'비고정':document.getElementById('s-freq').value+'회';
+    div.innerHTML='<div style="flex:1"><div class="si">🤖 '+synSlot.label+'</div><div class="sm" style="display:flex;align-items:center;gap:8px;margin-top:5px"><span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px">AI 추천</span><span style="font-size:11px;color:var(--muted)">'+freq+'</span></div></div><div style="font-size:12px;opacity:.5;margin-left:12px">선택 →</div>';
+    div.onclick=()=>{document.querySelectorAll('.slot-result').forEach(r=>r.classList.remove('chosen'));div.classList.add('chosen');selectedSlot=synSlot;};
+    container.insertBefore(div,container.firstChild);div.click();
+  } else {
+    const el=container.querySelector('#'+eid);if(el)el.remove();
+  }
+}
+// ── SETTINGS
+function saveGCalConfig(){alert('저장되었습니다.');}
 </script>
 </body>
 </html>
