@@ -1061,6 +1061,12 @@ function goStep3(){
 }
 
 // ── SLOT RESULTS
+const SOURCE_LABELS={
+  'ai':    {icon:'🤖', label:'AI 스크린샷 추천', color:'#e8f5e9', textColor:'#2e7d32'},
+  'calendar':{icon:'📅', label:'구글 캘린더 추천', color:'#e3f2fd', textColor:'#1565c0'},
+  'both':  {icon:'🔀', label:'캘린더+AI 통합 추천', color:'#f3e5f5', textColor:'#6a1b9a'},
+};
+
 function renderSlotResults(slots){
   const el=document.getElementById('slotResults'); selectedSlot=null;
   if(slots.length===0){el.innerHTML='<div class="empty">조건에 맞는 일정이 없습니다.<br>강사 설정 또는 학생 조건을 확인해주세요.</div>';return;}
@@ -1068,17 +1074,41 @@ function renderSlotResults(slots){
   const subjects=getChecked('s-subjects').join(', ');
   const freq=document.getElementById('s-freq').value;
 
-  // Section divider between single/multi instructor
+  // 소스별로 그룹화 후 ai → calendar → both 순서로 표시
+  const ORDER=['ai','calendar','both',undefined];
+  const grouped={};
+  slots.forEach(s=>{
+    const src=s.source||'calendar';
+    if(!grouped[src])grouped[src]=[];
+    grouped[src].push(s);
+  });
+
+  let firstSlot=true;
   let shownMultiHeader=false;
 
-  slots.forEach((slot,idx)=>{
-    if(slot.multiInstructor&&!shownMultiHeader){
-      const div=document.createElement('div');
-      div.style.cssText='font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:16px 0 8px;padding-left:4px';
-      div.textContent='— 복수 강사 조합';
-      el.appendChild(div);
-      shownMultiHeader=true;
+  ORDER.forEach(src=>{
+    const group=grouped[src];
+    if(!group||group.length===0)return;
+
+    // 소스 헤더
+    const srcInfo=SOURCE_LABELS[src];
+    if(srcInfo){
+      const hdr=document.createElement('div');
+      hdr.style.cssText='display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:4px;font-size:12px;font-weight:700;margin:'+(firstSlot?'0':'16px')+' 0 8px;background:'+srcInfo.color+';color:'+srcInfo.textColor;
+      hdr.textContent=srcInfo.icon+' '+srcInfo.label;
+      el.appendChild(hdr);
     }
+    firstSlot=false;
+    shownMultiHeader=false;
+
+    group.forEach((slot,idx)=>{
+      if(slot.multiInstructor&&!shownMultiHeader){
+        const div=document.createElement('div');
+        div.style.cssText='font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:12px 0 6px;padding-left:4px';
+        div.textContent='— 복수 강사 조합';
+        el.appendChild(div);
+        shownMultiHeader=true;
+      }
 
     const allSameIns=new Set(slot.entries.map(e=>e.instructor.id)).size===1;
     const insIcon=allSameIns?'👤':'👥';
@@ -1123,9 +1153,13 @@ function renderSlotResults(slots){
       div.classList.add('chosen');
       selectedSlot=slot;
     };
-    el.appendChild(div);
-    if(idx===0)div.click();
+      el.appendChild(div);
+      if(idx===0&&firstSlot===false)div.click();
+    });
   });
+  // 첫 번째 슬롯 자동 선택
+  const firstResult=el.querySelector('.slot-result');
+  if(firstResult)firstResult.click();
 }
 
 // ── MESSAGES
@@ -1574,6 +1608,14 @@ function setFindMode(mode){
   });
   document.getElementById('slotResults').innerHTML='<div class="empty">위에서 찾기 버튼을 눌러주세요.</div>';
   document.getElementById('aiAnalysisResult').style.display='none';
+  // 둘 다 모드에서도 같은 미리보기 표시
+  if(mode==='both'){
+    const src=document.getElementById('aiPreviewList');
+    const dst=document.getElementById('aiPreviewList2');
+    if(src&&dst) dst.innerHTML=src.innerHTML;
+    const lbl=document.getElementById('aiUploadLabel2');
+    if(lbl) lbl.textContent=pastedImages.length>0?'✅ '+pastedImages.length+'장 준비됨':'🖼 스크린샷 추가 (선택사항)';
+  }
 }
 
 // 📅 캘린더 자동 모드
@@ -1591,7 +1633,9 @@ async function runCalendarFind(){
     statusEl.style.background='#fce4ec';statusEl.style.color='#c62828';
     statusEl.innerHTML='<div class="dot"></div><span>연동된 캘린더 없음 — 강사 설정에서 ICS URL 입력 필요</span>';
   }
-  renderSlotResults(computeSlots());
+  const calSlots=computeSlots();
+  calSlots.forEach(s=>{if(!s.source)s.source='calendar';});
+  renderSlotResults(calSlots);
 }
 
 // 🔀 둘 다 모드
@@ -1605,16 +1649,18 @@ async function runBothFind(){
   await prefetchAllICS();
 
   // 스크린샷도 있으면 AI 분석 후 icsCache 보강
-  if(pastedImages2.length>0){
-    await runAIForCache(pastedImages2, statusEl);
+  if(pastedImages.length>0){
+    await runAIForCache(pastedImages, statusEl);
   }
 
   const withUrls=instructors.filter(i=>i.calId).length;
-  const withAI=pastedImages2.length>0;
+  const withAI=pastedImages.length>0;
   statusEl.style.background='#e8f5e9';statusEl.style.color='#2e7d32';
-  statusEl.innerHTML='<div class="dot" style="background:var(--success)"></div><span>완료 — ICS '+withUrls+'명 + AI '+(withAI?pastedImages2.length+'장':'없음')+'</span>';
+  statusEl.innerHTML='<div class="dot" style="background:var(--success)"></div><span>완료 — ICS '+withUrls+'명 + AI '+(withAI?pastedImages.length+'장':'없음')+'</span>';
 
-  renderSlotResults(computeSlots());
+  const bothSlots=computeSlots();
+  bothSlots.forEach(s=>{if(!s.source)s.source='both';});
+  renderSlotResults(bothSlots);
 }
 
 // 📸 스크린샷 모드 — AI로 icsCache 채우고 추천
@@ -1627,7 +1673,9 @@ async function runFindSlots(){
 
   // AI로 수업 있는 시간 + 빈 시간 동시 추출 → icsCache 주입 후 추천
   await runAIForCache(pastedImages, null);
-  renderSlotResults(computeSlots());
+  const slots=computeSlots();
+  slots.forEach(s=>{if(!s.source)s.source='ai';});
+  renderSlotResults(slots);
 }
 
 // AI 분석 → icsCache 주입 공통 함수
@@ -1700,10 +1748,7 @@ document.addEventListener('paste',function(e){
     if(item.type.startsWith('image/')){
       e.preventDefault();
       const file=item.getAsFile();
-      if(file){
-        if(findMode==='both') addAIImage2(file);
-        else addAIImage(file);
-      }
+      if(file) addAIImage(file);
       break;
     }
   }
@@ -1721,6 +1766,8 @@ async function addAIImage(file){
 }
 
 function renderAIPreviews(){
+  // 둘 다 모드 미리보기도 동기화
+  const list2=document.getElementById('aiPreviewList2');
   const list=document.getElementById('aiPreviewList');
   const wrap=document.getElementById('aiAnalyzeWrap');
   const count=document.getElementById('aiImageCount');
@@ -1746,6 +1793,12 @@ function renderAIPreviews(){
   } else {
     wrap.style.display='none';
     document.getElementById('aiUploadLabel').textContent='🖼 클릭 또는 드래그로 추가 (최대 3장)';
+  }
+  // 둘 다 모드 동기화
+  if(list2){
+    list2.innerHTML=list.innerHTML;
+    const lbl2=document.getElementById('aiUploadLabel2');
+    if(lbl2) lbl2.textContent=pastedImages.length>0?'✅ '+pastedImages.length+'장 준비됨 (Ctrl+V로 더 추가)':'🖼 스크린샷 추가 (선택사항)';
   }
 }
 
@@ -1798,35 +1851,11 @@ function handleAIDrop2(e){
   const files=e.dataTransfer.files;
   if(files&&files.length>0)handleAIUploadMulti2(files);
 }
-async function handleAIUploadMulti2(files){
-  if(!files||files.length===0)return;
-  for(const file of Array.from(files)) await addAIImage2(file);
-}
-async function addAIImage2(file){
-  if(pastedImages2.length>=3){alert('최대 3장');return;}
-  const b64=await fileToBase64(file);
-  const objectUrl=URL.createObjectURL(file);
-  pastedImages2.push({b64,mediaType:file.type||'image/png',objectUrl});
-  renderAIPreviews2();
-}
-function renderAIPreviews2(){
-  const list=document.getElementById('aiPreviewList2');
-  list.innerHTML='';
-  pastedImages2.forEach((img,i)=>{
-    const item=document.createElement('div'); item.className='ai-preview-item';
-    const el=document.createElement('img'); el.src=img.objectUrl; el.style.cssText='width:80px;height:60px;object-fit:cover;border-radius:4px;border:1.5px solid #e0e0e0';
-    const del=document.createElement('button'); del.className='del-btn'; del.textContent='×';
-    del.onclick=(e)=>{e.stopPropagation();pastedImages2.splice(i,1);renderAIPreviews2();};
-    item.appendChild(el); item.appendChild(del); list.appendChild(item);
-  });
-  const lbl=document.getElementById('aiUploadLabel2');
-  if(lbl) lbl.textContent=pastedImages2.length>0?'✅ '+pastedImages2.length+'장 준비됨 (클릭해서 추가)':'🖼 스크린샷 추가 (선택사항)';
-}
-function clearAIImages2(){
-  pastedImages2.forEach(img=>URL.revokeObjectURL(img.objectUrl));
-  pastedImages2=[];
-  renderAIPreviews2();
-}
+async function handleAIUploadMulti2(files){ await handleAIUploadMulti(files); }
+// addAIImage2/renderAIPreviews2/clearAIImages2 → 단일 pastedImages 공유
+async function addAIImage2(file){ await addAIImage(file); }
+function renderAIPreviews2(){ renderAIPreviews(); }
+function clearAIImages2(){ clearAIImages(); }
 // aiUploadArea 클릭 영역에서도 paste 감지 (포커스 보조)
 document.addEventListener('DOMContentLoaded',()=>{
   const area=document.getElementById('aiUploadArea');
@@ -1905,6 +1934,7 @@ function injectAISlot(s,add){
     if(container.querySelector('#'+eid))return;
     const div=document.createElement('div');div.className='slot-result';div.id=eid;
     const freq=lessonType==='flex'?'비고정':document.getElementById('s-freq').value+'회';
+    synSlot.source='ai';
     div.innerHTML='<div style="flex:1"><div class="si">🤖 '+synSlot.label+'</div><div class="sm" style="display:flex;align-items:center;gap:8px;margin-top:5px"><span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px">AI 추천</span><span style="font-size:11px;color:var(--muted)">'+freq+'</span></div></div><div style="font-size:12px;opacity:.5;margin-left:12px">선택 →</div>';
     div.onclick=()=>{document.querySelectorAll('.slot-result').forEach(r=>r.classList.remove('chosen'));div.classList.add('chosen');selectedSlot=synSlot;};
     container.insertBefore(div,container.firstChild);div.click();
