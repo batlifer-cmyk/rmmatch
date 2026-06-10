@@ -119,6 +119,19 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
 .ai-upload-area{border:2px dashed #ccc;border-radius:6px;padding:24px;text-align:center;cursor:pointer;transition:all .2s;background:#fafafa}
 .ai-upload-area:hover,.ai-upload-area.drag{border-color:var(--accent2);background:#f0f5f5}
 .ai-upload-area input{display:none}
+.ai-upload-area.paste-ready{border-color:var(--accent2);background:#f0f5f5}
+.ai-preview-item{position:relative;display:inline-block}
+.ai-preview-item img{width:90px;height:68px;object-fit:cover;border-radius:4px;border:1.5px solid #e0e0e0;display:block}
+.ai-preview-item .del-btn{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--danger);color:#fff;border:none;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;padding:0}
+.paste-hint{font-size:12px;color:var(--accent2);margin-top:8px;text-align:center}
+.home-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;background:var(--surface);border:1.5px solid #e0e0e0;border-radius:20px;font-size:12px;color:var(--muted);cursor:pointer;font-family:inherit;margin-bottom:16px;transition:all .15s}
+.home-btn:hover{border-color:var(--border);color:var(--border)}
+.mode-bar{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.mode-btn{flex:1;min-width:120px;padding:12px 8px;border:2px solid #e0e0e0;border-radius:6px;background:#fff;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;color:var(--muted);transition:all .15s;text-align:center}
+.mode-btn:hover{border-color:var(--accent2);color:var(--border)}
+.mode-btn.active{border-color:var(--border);background:var(--border);color:#fff}
+.mode-section{display:none}
+.mode-section.visible{display:block}
 .ai-result-slot{display:flex;align-items:center;gap:8px;padding:7px 12px;border:1.5px solid #e0e0e0;border-radius:4px;margin-bottom:6px;cursor:pointer;font-size:13px;transition:all .15s}
 .ai-result-slot:hover{border-color:var(--accent2);background:#f0f5f5}
 .ai-result-slot.picked{background:var(--border);color:#fff;border-color:var(--border)}
@@ -242,25 +255,61 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
   <!-- STEP 2 -->
   <div id="step2" style="display:none">
     <div class="card">
-      <div class="card-title">캘린더 연동 상태</div>
-      <div id="step2-ics-status" class="gcal-bar"><div class="dot"></div><span>ICS 불러오는 중...</span></div>
-    </div>
-    <div class="card">
-      <div class="card-title">📸 캘린더 스크린샷 AI 분석 <span style="font-size:11px;font-weight:400;color:var(--muted)">— 선택사항</span></div>
-      <div class="notice">구글/네이버 캘린더 화면을 캡처해서 업로드하면 AI가 빈 시간을 분석해 추천 슬롯에 추가합니다.</div>
-      <div class="ai-upload-area" id="aiUploadArea" onclick="document.getElementById('aiImgInput').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleAIDrop(event)">
-        <input type="file" id="aiImgInput" accept="image/*" multiple onchange="handleAIUploadMulti(this.files)">
-        <div id="aiUploadLabel" style="color:var(--muted);font-size:14px">🖼 클릭하거나 이미지를 드래그 (1~3장, 여러 주차 가능)</div>
+      <div class="card-title">일정 찾기 방법 선택</div>
+      <div class="mode-bar">
+        <button class="mode-btn active" id="modeBtn-screenshot" onclick="setFindMode('screenshot')">📸 스크린샷으로 찾기</button>
+        <button class="mode-btn" id="modeBtn-calendar" onclick="setFindMode('calendar')">📅 구글 캘린더로 찾기</button>
+        <button class="mode-btn" id="modeBtn-both" onclick="setFindMode('both')">🔀 둘 다 참조</button>
       </div>
-      <div id="aiPreviewList" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"></div>
-      <div id="aiAnalysisResult" style="margin-top:14px;display:none">
-        <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">AI 분석 결과 — 클릭해서 추천에 추가</div>
-        <div id="aiSlotList"></div>
+
+      <!-- 스크린샷 모드 -->
+      <div class="mode-section visible" id="modeSection-screenshot">
+        <div class="notice">캘린더 화면을 캡처해서 붙여넣으면 AI가 강사별 수업 시간을 파악하고 최적 슬롯을 추천합니다.</div>
+        <div class="ai-upload-area" id="aiUploadArea" onclick="document.getElementById('aiImgInput').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleAIDrop(event)">
+          <input type="file" id="aiImgInput" accept="image/*" multiple onchange="handleAIUploadMulti(this.files)">
+          <div id="aiUploadLabel" style="color:var(--muted);font-size:14px">🖼 클릭 또는 드래그로 추가 (최대 3장)</div>
+        </div>
+        <div class="paste-hint">📋 캘린더 캡처 후 <b>Ctrl+V</b> 로 바로 붙여넣기 (3번까지)</div>
+        <div id="aiPreviewList" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:flex-start"></div>
+        <div id="aiAnalyzeWrap" style="display:none;margin-top:12px">
+          <button class="btn btn-primary btn-sm" onclick="runFindSlots()">🤖 추천 일정 찾기</button>
+          <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="clearAIImages()">🗑 초기화</button>
+          <span style="font-size:12px;color:var(--muted);margin-left:10px" id="aiImageCount"></span>
+        </div>
+      </div>
+
+      <!-- 캘린더 자동 모드 -->
+      <div class="mode-section" id="modeSection-calendar">
+        <div id="step2-ics-status" class="gcal-bar"><div class="dot"></div><span>캘린더 연동 대기 중</span></div>
+        <div class="notice">강사 설정에 입력된 ICS URL을 자동으로 읽어 빈 시간을 추천합니다.</div>
+        <button class="btn btn-primary btn-sm mt16" onclick="runCalendarFind()">📅 캘린더 읽고 추천 찾기</button>
+      </div>
+
+      <!-- 둘 다 모드 -->
+      <div class="mode-section" id="modeSection-both">
+        <div class="notice">스크린샷 AI 분석 + 구글 캘린더 ICS를 모두 읽어 합산합니다. 더 정확한 추천이 가능합니다.</div>
+        <div class="ai-upload-area" id="aiUploadArea2" onclick="document.getElementById('aiImgInput2').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleAIDrop2(event)">
+          <input type="file" id="aiImgInput2" accept="image/*" multiple onchange="handleAIUploadMulti2(this.files)">
+          <div id="aiUploadLabel2" style="color:var(--muted);font-size:14px">🖼 스크린샷 추가 (선택사항)</div>
+        </div>
+        <div class="paste-hint">📋 <b>Ctrl+V</b> 로 붙여넣기 가능</div>
+        <div id="aiPreviewList2" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:flex-start"></div>
+        <div style="margin-top:12px">
+          <button class="btn btn-primary btn-sm" onclick="runBothFind()">🔀 모두 참조해서 추천 찾기</button>
+          <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="clearAIImages2()">🗑 초기화</button>
+        </div>
+        <div id="step2-ics-status2" class="gcal-bar" style="margin-top:12px;display:none"><div class="dot"></div><span></span></div>
       </div>
     </div>
+
+    <div class="card" id="aiAnalysisResult" style="display:none">
+      <div class="card-title">AI 분석 결과 <span style="font-size:11px;font-weight:400;color:var(--muted)">— 클릭해서 추천에 직접 추가</span></div>
+      <div id="aiSlotList"></div>
+    </div>
+
     <div class="card">
       <div class="card-title">추천 일정 <span style="font-size:12px;font-weight:400;color:var(--muted)">— 클릭해서 선택</span></div>
-      <div id="slotResults"><div class="empty">계산 중...</div></div>
+      <div id="slotResults"><div class="empty">위에서 찾기 버튼을 눌러주세요.</div></div>
     </div>
     <div class="card">
       <div class="card-title">학생 상세 정보 (강사 전달용)</div>
@@ -338,6 +387,7 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
 
 <!-- INSTRUCTORS -->
 <div id="page-instructors" class="page">
+  <button class="home-btn" onclick="document.querySelector('header nav button').click()">← 스케쥴링 홈</button>
   <div class="sec-title">강사 설정</div>
   <div class="sec-sub">강사별 가능 요일, 시간, 과목을 관리합니다.</div>
   <div class="ins-grid" id="instructorGrid"></div>
@@ -345,6 +395,7 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
 
 <!-- SETTINGS -->
 <div id="page-settings" class="page">
+  <button class="home-btn" onclick="document.querySelector('header nav button').click()">← 스케쥴링 홈</button>
   <div class="sec-title">설정</div>
   <div class="sec-sub">구글 캘린더 연동 및 앱 설정</div>
   <div class="card">
@@ -428,7 +479,7 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
 </div>
 
 <script>
-const PW_DEFAULT='rm2024';
+const PW_DEFAULT='rm0707';
 const TIMES=['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00'];
 const DAYS=['월','화','수','목','금','토','일'];
 const SUBJECTS=['스몰톡(사교영어)','스몰톡 프로(TED)','여행영어','비지니스','영어면접','교수임용','토플','아이엘츠','오픽','토스','토익','키즈'];
@@ -492,7 +543,10 @@ function changePw(){
   const p1=document.getElementById('cfg-newpw').value,p2=document.getElementById('cfg-newpw2').value;
   if(!p1)return alert('새 비밀번호를 입력하세요.');
   if(p1!==p2)return alert('비밀번호가 일치하지 않습니다.');
-  localStorage.setItem('rm_pw',p1);alert('변경되었습니다.');
+  localStorage.setItem('rm_pw',p1);
+  document.getElementById('cfg-newpw').value='';
+  document.getElementById('cfg-newpw2').value='';
+  alert('비밀번호가 변경되었습니다.\n다음 로그인부터 새 비밀번호를 사용하세요.');
 }
 
 // ── PAGE NAV
@@ -501,6 +555,7 @@ function showPage(id,btn){
   document.querySelectorAll('header nav button').forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
   btn.classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
 }
 
 // ── CHECKBOX HELPERS
@@ -911,6 +966,8 @@ async function goStep2Flex(){
     statusEl.innerHTML='<div class="dot"></div><span>ICS 미연동 — 강사 설정 기준으로만 추천합니다</span>';
   }
   // 비고정식: 지정 강사, 주1회, 모든 요일/시간 후보로 계산
+  setFindMode('screenshot');
+  document.getElementById('slotResults').innerHTML='<div class="empty">위에서 찾기 버튼을 눌러주세요.</div>';
   const flexSlots=computeFlexSlots();
   renderSlotResults(flexSlots);
 }
@@ -976,18 +1033,8 @@ async function goStep2(){
   if(!name||!phone)return alert('학생 이름과 전화번호는 필수입니다.');
   if(subjects.length===0)return alert('수업 과목을 1개 이상 선택해주세요.');
   setStep(2);
-  document.getElementById('slotResults').innerHTML='<div class="empty">강사 캘린더 불러오는 중...</div>';
-  await prefetchAllICS();
-  const withUrls=instructors.filter(i=>i.calId).length;
-  const statusEl=document.getElementById('step2-ics-status');
-  if(withUrls>0){
-    statusEl.className='gcal-bar connected';
-    statusEl.style.background='#e8f5e9';statusEl.style.color='#2e7d32';
-    statusEl.innerHTML='<div class="dot" style="background:var(--success)"></div><span>'+withUrls+'명 강사 캘린더 연동됨 — 기존 수업 반영해서 추천합니다</span>';
-  } else {
-    statusEl.innerHTML='<div class="dot"></div><span>ICS URL 미입력 — 강사 설정의 가능 시간 기준으로만 추천합니다</span>';
-  }
-  renderSlotResults(computeSlots());
+  setFindMode('screenshot');
+  document.getElementById('slotResults').innerHTML='<div class="empty">위에서 찾기 버튼을 눌러주세요.</div>';
 }
 function goStep3(){
   if(!selectedSlot)return alert('일정을 선택해주세요.');
@@ -1514,10 +1561,205 @@ async function testAllICS(){
   statusEl.innerHTML=results.map(r=>r.value||r.reason).join('');
 }
 
+// ── FIND MODE
+let findMode='screenshot'; // 'screenshot' | 'calendar' | 'both'
+let pastedImages=[];  // mode: screenshot
+let pastedImages2=[]; // mode: both
+
+function setFindMode(mode){
+  findMode=mode;
+  ['screenshot','calendar','both'].forEach(m=>{
+    document.getElementById('modeBtn-'+m).classList.toggle('active',m===mode);
+    document.getElementById('modeSection-'+m).classList.toggle('visible',m===mode);
+  });
+  document.getElementById('slotResults').innerHTML='<div class="empty">위에서 찾기 버튼을 눌러주세요.</div>';
+  document.getElementById('aiAnalysisResult').style.display='none';
+}
+
+// 📅 캘린더 자동 모드
+async function runCalendarFind(){
+  const statusEl=document.getElementById('step2-ics-status');
+  statusEl.style.display='flex';
+  statusEl.innerHTML='<div class="dot"></div><span>캘린더 읽는 중...</span>';
+  document.getElementById('slotResults').innerHTML='<div class="empty">캘린더 불러오는 중...</div>';
+  await prefetchAllICS();
+  const withUrls=instructors.filter(i=>i.calId).length;
+  if(withUrls>0){
+    statusEl.style.background='#e8f5e9';statusEl.style.color='#2e7d32';
+    statusEl.innerHTML='<div class="dot" style="background:var(--success)"></div><span>'+withUrls+'명 캘린더 연동 완료</span>';
+  } else {
+    statusEl.style.background='#fce4ec';statusEl.style.color='#c62828';
+    statusEl.innerHTML='<div class="dot"></div><span>연동된 캘린더 없음 — 강사 설정에서 ICS URL 입력 필요</span>';
+  }
+  renderSlotResults(computeSlots());
+}
+
+// 🔀 둘 다 모드
+async function runBothFind(){
+  const statusEl=document.getElementById('step2-ics-status2');
+  statusEl.style.display='flex';
+  statusEl.innerHTML='<div class="dot"></div><span>캘린더 + 스크린샷 분석 중...</span>';
+  document.getElementById('slotResults').innerHTML='<div class="empty">분석 중...</div>';
+
+  // ICS fetch 먼저
+  await prefetchAllICS();
+
+  // 스크린샷도 있으면 AI 분석 후 icsCache 보강
+  if(pastedImages2.length>0){
+    await runAIForCache(pastedImages2, statusEl);
+  }
+
+  const withUrls=instructors.filter(i=>i.calId).length;
+  const withAI=pastedImages2.length>0;
+  statusEl.style.background='#e8f5e9';statusEl.style.color='#2e7d32';
+  statusEl.innerHTML='<div class="dot" style="background:var(--success)"></div><span>완료 — ICS '+withUrls+'명 + AI '+(withAI?pastedImages2.length+'장':'없음')+'</span>';
+
+  renderSlotResults(computeSlots());
+}
+
+// 📸 스크린샷 모드 — AI로 icsCache 채우고 추천
+async function runFindSlots(){
+  if(pastedImages.length===0){alert('스크린샷을 먼저 추가해주세요.');return;}
+  const key=getAnthropicKey();
+  if(!key){alert('설정 탭에서 Anthropic API Key를 먼저 입력해주세요.');return;}
+  document.getElementById('aiUploadLabel').textContent='⏳ AI 분석 중...';
+  document.getElementById('slotResults').innerHTML='<div class="empty">AI 분석 중...</div>';
+
+  // AI로 수업 있는 시간 + 빈 시간 동시 추출 → icsCache 주입 후 추천
+  await runAIForCache(pastedImages, null);
+  renderSlotResults(computeSlots());
+}
+
+// AI 분석 → icsCache 주입 공통 함수
+async function runAIForCache(images, statusEl){
+  const key=getAnthropicKey();
+  if(!key)return;
+  try{
+    const contentArr=[];
+    images.forEach(img=>{
+      contentArr.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.b64}});
+    });
+    const insNames=instructors.map(i=>i.name).join(', ');
+    contentArr.push({type:'text',text:'위 캘린더 이미지('+images.length+'장)를 분석해주세요. 네이버/구글 캘린더 좌측 하단 색상 범례로 강사별 색상을 파악하세요. 강사 이름 목록: '+insNames+'. 각 강사의 수업이 있는 시간(busy)과 비어있는 시간(free)을 강사별로 추출하세요. 반드시 아래 JSON 형식만 출력하세요. {"instructors":[{"name":"데이빗","busy":[{"day":"화","time":"14:00"}],"free":[{"day":"월","time":"10:00"}]}]} day는 월화수목금토일, time은 HH:MM 24시간 형식. 색상 구분 불가시 전체 캘린더 기준으로 추출하세요.'});
+
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:contentArr}]})
+    });
+    const data=await resp.json();
+    if(data.error)throw new Error(data.error.message);
+    const text=data.content?.find(c=>c.type==='text')?.text||'';
+    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+
+    if(parsed.instructors){
+      // busy → icsCache 주입
+      parsed.instructors.forEach(group=>{
+        const ins=instructors.find(i=>
+          i.name.split(' ').some(n=>group.name.includes(n))||
+          group.name.split(' ').some(n=>i.name.includes(n))
+        );
+        if(!ins)return;
+        const busySlots=(group.busy||[]).map(s=>({
+          dow:['일','월','화','수','목','금','토'].indexOf(s.day),
+          hour:parseInt(s.time.split(':')[0]),
+          dateStr:'ai'
+        })).filter(s=>s.dow>=0);
+        // 기존 icsCache와 병합
+        const existing=(icsCache[ins.id]&&icsCache[ins.id].slots)||[];
+        const merged=[...existing,...busySlots];
+        icsCache[ins.id]={fetched:Date.now(),slots:merged};
+      });
+      // free → AI 결과 직접 표시
+      const freeGroups=parsed.instructors.map(g=>({name:g.name,slots:g.free||[]})).filter(g=>g.slots.length>0);
+      if(freeGroups.length>0){
+        document.getElementById('aiAnalysisResult').style.display='block';
+        renderAISlots([],freeGroups);
+      }
+    }
+    document.getElementById('aiUploadLabel').textContent='✅ 분석 완료';
+  }catch(e){
+    console.error(e);
+    document.getElementById('aiUploadLabel').textContent='❌ AI 분석 실패: '+(e.message||'');
+  }
+}
+
 // ── AI CALENDAR ANALYSIS
+
 function getAnthropicKey(){
   return localStorage.getItem('rm_anthropic_key')||'';
 }
+
+// 전역 paste 이벤트: STEP 2 활성화 상태에서 Ctrl+V 감지
+document.addEventListener('paste',function(e){
+  const step2=document.getElementById('step2');
+  if(!step2||step2.style.display==='none')return;
+  const items=e.clipboardData&&e.clipboardData.items;
+  if(!items)return;
+  for(const item of items){
+    if(item.type.startsWith('image/')){
+      e.preventDefault();
+      const file=item.getAsFile();
+      if(file){
+        if(findMode==='both') addAIImage2(file);
+        else addAIImage(file);
+      }
+      break;
+    }
+  }
+});
+
+async function addAIImage(file){
+  if(pastedImages.length>=3){
+    alert('최대 3장까지 입력 가능합니다. 초기화 후 다시 시도하세요.');
+    return;
+  }
+  const b64=await fileToBase64(file);
+  const objectUrl=URL.createObjectURL(file);
+  pastedImages.push({b64,mediaType:file.type||'image/png',objectUrl});
+  renderAIPreviews();
+}
+
+function renderAIPreviews(){
+  const list=document.getElementById('aiPreviewList');
+  const wrap=document.getElementById('aiAnalyzeWrap');
+  const count=document.getElementById('aiImageCount');
+  list.innerHTML='';
+  pastedImages.forEach((img,i)=>{
+    const item=document.createElement('div');
+    item.className='ai-preview-item';
+    const el=document.createElement('img');
+    el.src=img.objectUrl;
+    el.title=(i+1)+'번째 이미지';
+    const del=document.createElement('button');
+    del.className='del-btn';
+    del.textContent='×';
+    del.onclick=(e)=>{e.stopPropagation();pastedImages.splice(i,1);renderAIPreviews();};
+    item.appendChild(el);item.appendChild(del);
+    list.appendChild(item);
+  });
+  if(pastedImages.length>0){
+    wrap.style.display='block';
+    count.textContent=pastedImages.length+'장 준비됨'+(pastedImages.length<3?' (최대 3장까지 추가 가능)':'');
+    document.getElementById('aiUploadLabel').textContent=
+      pastedImages.length>=3?'🖼 3장 입력 완료':'🖼 클릭 또는 Ctrl+V로 추가 ('+(3-pastedImages.length)+'장 더 가능)';
+  } else {
+    wrap.style.display='none';
+    document.getElementById('aiUploadLabel').textContent='🖼 클릭 또는 드래그로 추가 (최대 3장)';
+  }
+}
+
+function clearAIImages(){
+  pastedImages.forEach(img=>URL.revokeObjectURL(img.objectUrl));
+  pastedImages=[];
+  renderAIPreviews();
+  document.getElementById('aiAnalysisResult').style.display='none';
+  document.getElementById('aiSlotList').innerHTML='';
+  document.getElementById('aiUploadLabel').textContent='🖼 클릭 또는 드래그로 추가 (최대 3장)';
+}
+
+// runAIAnalysis → runFindSlots로 통합
+async function runAIAnalysis(){ await runFindSlots(); }
 function saveAnthropicKey(){
   const key=document.getElementById('cfg-anthropic-key').value.trim();
   if(!key){alert('API Key를 입력해주세요.');return;}
@@ -1539,48 +1781,8 @@ function initAnthropicKeyDisplay(){
 
 async function handleAIUploadMulti(files){
   if(!files||files.length===0)return;
-  const key=getAnthropicKey();
-  if(!key){
-    alert('설정 탭에서 Anthropic API Key를 먼저 입력해주세요.');
-    return;
-  }
-  const label=document.getElementById('aiUploadLabel');
-  const previewList=document.getElementById('aiPreviewList');
-  label.textContent='⏳ '+files.length+'장 이미지 AI 분석 중...';
-  previewList.innerHTML='';
-
-  // Show previews
-  Array.from(files).forEach((file,i)=>{
-    const img=document.createElement('img');
-    img.style.cssText='width:80px;height:60px;object-fit:cover;border-radius:4px;border:1.5px solid #e0e0e0';
-    const url=URL.createObjectURL(file);
-    img.src=url;
-    img.title=file.name;
-    previewList.appendChild(img);
-  });
-
-  try{
-    // Build content array: all images + instruction
-    const contentArr=[];
-    for(const file of Array.from(files)){
-      const b64=await fileToBase64(file);
-      contentArr.push({type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:b64}});
-    }
-    contentArr.push({type:'text',text:'위 캘린더 이미지(1~3장)에서 수업이 없는 빈 시간대를 찾아주세요. 이미지에 날짜가 보이면 날짜도 함께 추출하세요. 여러 주차 이미지라면 각 날짜별로 빈 시간을 추출하세요. 반드시 아래 JSON 형식만 출력하세요. 다른 텍스트 없이. {"slots":[{"date":"2026-06-02","day":"월","time":"10:00"}]} date는 YYYY-MM-DD 형식(날짜가 보이면), day는 월화수목금토일 중 하나, time은 HH:MM 24시간 형식. 수업이 있는 시간은 제외하고 비어있는 시간대만 포함하세요.'});
-
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:contentArr}]})
-    });
-    const data=await resp.json();
-    if(data.error){throw new Error(data.error.message);}
-    const text=data.content?.find(c=>c.type==='text')?.text||'';
-    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
-    renderAISlots(parsed.slots||[]);
-  }catch(e){
-    console.error(e);
-    label.textContent='❌ 분석 실패: '+(e.message||'다시 시도해주세요.');
+  for(const file of Array.from(files)){
+    await addAIImage(file);
   }
 }
 
@@ -1590,44 +1792,111 @@ function handleAIDrop(e){
   const files=e.dataTransfer.files;
   if(files&&files.length>0)handleAIUploadMulti(files);
 }
+function handleAIDrop2(e){
+  e.preventDefault();
+  document.getElementById('aiUploadArea2').classList.remove('drag');
+  const files=e.dataTransfer.files;
+  if(files&&files.length>0)handleAIUploadMulti2(files);
+}
+async function handleAIUploadMulti2(files){
+  if(!files||files.length===0)return;
+  for(const file of Array.from(files)) await addAIImage2(file);
+}
+async function addAIImage2(file){
+  if(pastedImages2.length>=3){alert('최대 3장');return;}
+  const b64=await fileToBase64(file);
+  const objectUrl=URL.createObjectURL(file);
+  pastedImages2.push({b64,mediaType:file.type||'image/png',objectUrl});
+  renderAIPreviews2();
+}
+function renderAIPreviews2(){
+  const list=document.getElementById('aiPreviewList2');
+  list.innerHTML='';
+  pastedImages2.forEach((img,i)=>{
+    const item=document.createElement('div'); item.className='ai-preview-item';
+    const el=document.createElement('img'); el.src=img.objectUrl; el.style.cssText='width:80px;height:60px;object-fit:cover;border-radius:4px;border:1.5px solid #e0e0e0';
+    const del=document.createElement('button'); del.className='del-btn'; del.textContent='×';
+    del.onclick=(e)=>{e.stopPropagation();pastedImages2.splice(i,1);renderAIPreviews2();};
+    item.appendChild(el); item.appendChild(del); list.appendChild(item);
+  });
+  const lbl=document.getElementById('aiUploadLabel2');
+  if(lbl) lbl.textContent=pastedImages2.length>0?'✅ '+pastedImages2.length+'장 준비됨 (클릭해서 추가)':'🖼 스크린샷 추가 (선택사항)';
+}
+function clearAIImages2(){
+  pastedImages2.forEach(img=>URL.revokeObjectURL(img.objectUrl));
+  pastedImages2=[];
+  renderAIPreviews2();
+}
+// aiUploadArea 클릭 영역에서도 paste 감지 (포커스 보조)
+document.addEventListener('DOMContentLoaded',()=>{
+  const area=document.getElementById('aiUploadArea');
+  if(area) area.addEventListener('click',()=>area.focus&&area.focus());
+});
 function fileToBase64(file){
   return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
 }
-function renderAISlots(slots){
+function renderAISlots(slots,instructorGroups){
   const el=document.getElementById('aiSlotList');
   const wrap=document.getElementById('aiAnalysisResult');
-  const label=document.getElementById('aiUploadLabel');
-  wrap.style.display=slots.length?'block':'none';
-  if(!slots.length){label.textContent='빈 시간을 찾지 못했습니다.';return;}
-  label.textContent='✅ '+slots.length+'개 빈 시간 감지됨 — 클릭해서 추천에 추가';
+  wrap.style.display='block';
   el.innerHTML='';
-  // Group by date if available
-  const byDate={};
-  slots.forEach(s=>{
-    const key=s.date||'날짜 미확인';
-    if(!byDate[key])byDate[key]=[];
-    byDate[key].push(s);
-  });
-  Object.entries(byDate).forEach(([dateKey,dateSlots])=>{
-    if(dateKey!=='날짜 미확인'){
-      const hdr=document.createElement('div');
-      hdr.style.cssText='font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 4px;padding-left:2px';
-      hdr.textContent=fmtDate(dateKey)+' ('+dateSlots[0].day+'요일)';
-      el.appendChild(hdr);
-    }
-    dateSlots.forEach(s=>{
-      const div=document.createElement('div');
-      div.className='ai-result-slot';
-      const dateLabel=s.date?fmtDate(s.date)+' ':'';
-      div.innerHTML='<span>🤖</span><span><b>'+dateLabel+s.day+'요일 '+fmtTime(s.time)+'</b></span><span style="font-size:11px;color:inherit;opacity:.6;margin-left:auto">클릭해서 추가</span>';
-      div.onclick=()=>{div.classList.toggle('picked');injectAISlot(s,div.classList.contains('picked'));};
-      el.appendChild(div);
+
+  // instructorGroups: [{name, slots}] from new format
+  // slots: fallback from old format
+  const groups=instructorGroups||[{name:'전체',slots:slots||[]}];
+  let totalCount=0;
+
+  groups.forEach(group=>{
+    if(!group.slots||!group.slots.length)return;
+    totalCount+=group.slots.length;
+
+    // 강사 헤더
+    const insHdr=document.createElement('div');
+    insHdr.style.cssText='font-size:12px;font-weight:700;color:var(--border);margin:12px 0 6px;padding:4px 8px;background:var(--surface);border-radius:3px;display:inline-block';
+    insHdr.textContent='👤 '+group.name;
+    el.appendChild(insHdr);
+
+    // 날짜별 그룹
+    const byDate={};
+    group.slots.forEach(s=>{
+      const key=s.date||'날짜 미확인';
+      if(!byDate[key])byDate[key]=[];
+      byDate[key].push(s);
+    });
+
+    Object.entries(byDate).forEach(([dateKey,dateSlots])=>{
+      if(dateKey!=='날짜 미확인'){
+        const hdr=document.createElement('div');
+        hdr.style.cssText='font-size:11px;font-weight:600;color:var(--muted);margin:6px 0 3px;padding-left:2px';
+        hdr.textContent=fmtDate(dateKey)+' ('+dateSlots[0].day+'요일)';
+        el.appendChild(hdr);
+      }
+      dateSlots.forEach(s=>{
+        const div=document.createElement('div');
+        div.className='ai-result-slot';
+        const dateLabel=s.date?fmtDate(s.date)+' ':'';
+        const insName=group.name!=='전체'?group.name:null;
+        div.innerHTML='<span>🤖</span><span><b>'+dateLabel+s.day+'요일 '+fmtTime(s.time)+'</b>'+(insName?'<span style="font-size:11px;color:inherit;opacity:.7;margin-left:6px">'+insName+'</span>':'')+'</span><span style="font-size:11px;color:inherit;opacity:.6;margin-left:auto">추가</span>';
+        div.onclick=()=>{
+          div.classList.toggle('picked');
+          // injectAISlot에 강사 이름도 전달
+          injectAISlot({...s,instructorName:insName},div.classList.contains('picked'));
+        };
+        el.appendChild(div);
+      });
     });
   });
+
+  document.getElementById('aiUploadLabel').textContent='✅ '+totalCount+'개 빈 시간 감지됨 — 클릭해서 추천에 추가';
 }
 function injectAISlot(s,add){
   const directIds=Array.from(document.querySelectorAll('#s-instructor-direct input:checked')).map(i=>i.value);
-  const ins=directIds.length>0?instructors.find(i=>i.id===directIds[0]):instructors[0];
+  // 강사 이름으로 매칭 시도
+  let ins=null;
+  if(s.instructorName&&s.instructorName!=='전체'){
+    ins=instructors.find(i=>i.name.includes(s.instructorName.split(' ')[0])||s.instructorName.includes(i.name.split(' ')[0]));
+  }
+  if(!ins)ins=directIds.length>0?instructors.find(i=>i.id===directIds[0]):instructors[0];
   if(!ins)return;
   const synSlot={entries:[{instructor:ins,day:s.day,time:s.time}],multiInstructor:false,score:15,label:s.day+'요일 '+fmtTime(s.time)+' (AI)',aiSuggested:true};
   const container=document.getElementById('slotResults');
