@@ -671,6 +671,7 @@ function renderDayTimeRows(){
       const chip=document.createElement('div');
       chip.className='time-chip'+(existing[day]&&existing[day].includes(t)?' on':'');
       chip.dataset.t=t; chip.textContent=t;
+      chip.onclick=()=>chip.classList.toggle('on');
       chips.appendChild(chip);
     });
     // 직접입력 칩
@@ -690,6 +691,7 @@ function renderDayTimeRows(){
             const chip=document.createElement('div');
             chip.className='time-chip on';
             chip.dataset.t=val; chip.textContent=val;
+            chip.onclick=()=>chip.classList.toggle('on');
             chips.appendChild(chip);
           }
           this.value='';
@@ -699,12 +701,12 @@ function renderDayTimeRows(){
         }
       }
     });
-    // 클릭 + 드래그 동시 지원
+    // 드래그 선택 지원
     let dragOn=false, dragMode=null;
     chips.addEventListener('mousedown',function(e){
       const chip=e.target.closest('.time-chip');
       if(!chip)return;
-      e.preventDefault(); // click 이벤트 발화 방지
+      e.preventDefault();
       dragOn=true;
       dragMode=chip.classList.contains('on')?'off':'on';
       chip.classList.toggle('on',dragMode==='on');
@@ -994,18 +996,20 @@ function goNoSchedule(){
   const name=document.getElementById('s-name').value.trim();
   const phone=document.getElementById('s-phone').value.trim();
   if(!name||!phone)return alert('학생 이름과 전화번호는 필수입니다.');
-  // 더미 슬롯 생성 (날짜/시간 플레이스홀더)
   const directIds=Array.from(document.querySelectorAll('#s-instructor-direct input:checked')).map(i=>i.value);
   const ins=directIds.length>0?instructors.find(i=>i.id===directIds[0]):instructors[0];
   if(!ins)return alert('강사를 먼저 선택해주세요.');
   selectedSlot={
-    entries:[{instructor:ins,day:'_',time:'_'}],
+    entries:[{instructor:ins,day:'[요일]',time:'[시간]'}],
     multiInstructor:false,score:0,label:'직접 입력 필요',noSchedule:true
   };
   setStep(3);
-  const wrap=document.getElementById('startdate-wrap');
-  wrap.innerHTML='<div class="no-sched-msg">📝 날짜와 시간을 아래 메세지에서 직접 수정하세요.</div>';
-  generateMessages();
+  if(lessonType==='flex'){
+    renderFlexNoScheduleInputs();
+  } else {
+    renderNoScheduleInputs();
+    generateMessages();
+  }
   resetChecklist();
 }
 
@@ -1344,7 +1348,11 @@ function getStartDates(){
 function generateMessages(){
   // 일정없이 메세지 생성
   if(selectedSlot&&selectedSlot.noSchedule){
-    generateNoScheduleMessages();
+    if(lessonType==='flex'){
+      generateFlexNoScheduleMessages();
+    } else {
+      generateNoScheduleMessages();
+    }
     return;
   }
   // 비고정식 처리
@@ -1515,35 +1523,61 @@ ${detail||'(상세정보 없음)'}`;
   resetChecklist();
 }
 
-function generateNoScheduleMessages(){
+// ── 일정없이 메세지: 직접기입 인풋 렌더 ──────────────────────────
+function renderFlexNoScheduleInputs(){
+  const wrap=document.getElementById('startdate-wrap');
+  wrap.innerHTML=`
+<div class="no-sched-msg" style="margin-bottom:14px">✏️ 비고정식 — 첫 수업 정보를 입력하면 메세지에 실시간 반영됩니다.</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+  <div class="form-group">
+    <label>첫 수업 날짜 (예: 8월 6일)</label>
+    <input type="text" id="fns-date" placeholder="예: 8월 6일" oninput="generateFlexNoScheduleMessages()">
+  </div>
+  <div class="form-group">
+    <label>요일 (예: 수)</label>
+    <input type="text" id="fns-day" placeholder="예: 수" maxlength="1" oninput="generateFlexNoScheduleMessages()">
+  </div>
+  <div class="form-group">
+    <label>시각 (예: 오후8시)</label>
+    <input type="text" id="fns-time" placeholder="예: 오후8시" oninput="generateFlexNoScheduleMessages()">
+  </div>
+</div>`;
+  generateFlexNoScheduleMessages();
+}
+
+function fnsv(id,fallback){
+  const el=document.getElementById(id);
+  return(el&&el.value.trim())||fallback;
+}
+
+function generateFlexNoScheduleMessages(){
   const name=document.getElementById('s-name').value.trim();
   const phone=document.getElementById('s-phone').value.trim();
   const detail=document.getElementById('s-detail').value.trim();
+  if(!selectedSlot)return;
   const ins=selectedSlot.entries[0].instructor;
-  const freq=document.getElementById('s-freq').value;
-  const dur=document.getElementById('s-duration').value;
-  const durLabel=dur==='1'?'1시간':dur==='1.5'?'1시간 30분':'2시간';
-  // _ 통일 플레이스홀더 (요일 자리에는 요일 안내 포함)
-  const msg1=`신규(${name}님) _/_ _요일 _시 있습니다.`;
-  const msg3=`[수업일정 확정 안내]
-매주 주${freq}회, ${durLabel}씩
-_요일 _시
 
-수업 시작일은 _월 _일 _요일입니다.
+  const date  = fnsv('fns-date','_월 _일');
+  const day   = fnsv('fns-day','_');
+  const time  = fnsv('fns-time','_시');
+
+  const dateDay = `${date}(${day})`;
+
+  const msg1=`신규(${name}님) 비고정 첫수업 ${dateDay} ${time} 있습니다.`;
+  const msg3=`[수업일정 확정 안내]
+* 비고정
+첫 수업은 ${dateDay} ${time}입니다.
 
 * 수업장소 : 라이언멤버스 교실
 벽산E오렌지프라자 5층 542호, 535호 (짐보리 옆)
 http://naver.me/GVbfXaul`;
-  const msg6=`수업일정 확정
+  const msg6=`수업일정 확정 (비고정)
 ${name} ${phone}
-
-매주 주${freq}회, ${durLabel}씩
-_요일 _시
-
-수업 시작일은 _월 _일 _요일입니다.
+첫 수업: ${dateDay} ${time}
 
 상세정보
 ${detail||'(상세정보 없음)'}`;
+
   const msgs=[
     {label:'① 강사 1차 안내',type:'ins',to:ins.name,body:msg1},
     {label:'② 학생 확정 — 수업일정',type:'stu',to:name,body:msg3},
@@ -1552,10 +1586,104 @@ ${detail||'(상세정보 없음)'}`;
     {label:'⑤ 강사 확정 메세지',type:'ins',to:ins.name,body:msg6},
   ];
   const c=document.getElementById('messagesOutput'); c.innerHTML='';
-  const notice=document.createElement('div');
-  notice.className='no-sched-msg';
-  notice.textContent='📝 _ 자리를 카카오톡에서 직접 수정 후 발송하세요. (요일: 월/화/수/목/금/토/일 중 한 글자)';
-  c.appendChild(notice);
+  msgs.forEach((m,i)=>{
+    const b=document.createElement('div'); b.className='msg-block';
+    b.innerHTML=`<div class="msg-header"><span>${m.label}</span><span class="msg-tag ${m.type}">→ ${m.to} (${m.type==='ins'?'강사':'학생'})</span></div><div class="msg-body" id="mb${i}">${esc(m.body)}</div><div class="msg-actions"><button class="btn-copy" id="cb${i}" onclick="copyMsg(${i})">복사</button></div>`;
+    c.appendChild(b);
+  });
+  resetChecklist();
+}
+
+function renderNoScheduleInputs(){
+  const wrap=document.getElementById('startdate-wrap');
+  wrap.innerHTML=`
+<div class="no-sched-msg" style="margin-bottom:14px">✏️ 아래에서 직접 입력하면 메세지에 실시간 반영됩니다.</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+  <div class="form-group">
+    <label>요일 (강사 안내용)</label>
+    <input type="text" id="ns-day1" placeholder="예: 화" maxlength="1" oninput="generateNoScheduleMessages()">
+  </div>
+  <div class="form-group">
+    <label>날짜 (월/일)</label>
+    <input type="text" id="ns-date1" placeholder="예: 6/17" oninput="generateNoScheduleMessages()">
+  </div>
+  <div class="form-group">
+    <label>시각</label>
+    <input type="text" id="ns-time1" placeholder="예: 19" maxlength="4" oninput="generateNoScheduleMessages()">
+  </div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:4px">
+  <div class="form-group">
+    <label>주 횟수</label>
+    <input type="text" id="ns-freq" placeholder="예: 2" maxlength="1" oninput="generateNoScheduleMessages()">
+  </div>
+  <div class="form-group">
+    <label>수업 시간</label>
+    <input type="text" id="ns-dur" placeholder="예: 1시간" oninput="generateNoScheduleMessages()">
+  </div>
+  <div class="form-group">
+    <label>시작일 요일</label>
+    <input type="text" id="ns-startday" placeholder="예: 화" maxlength="1" oninput="generateNoScheduleMessages()">
+  </div>
+  <div class="form-group">
+    <label>시작 날짜 (월 일)</label>
+    <input type="text" id="ns-startdate" placeholder="예: 6월 17일" oninput="generateNoScheduleMessages()">
+  </div>
+</div>`;
+}
+
+function nsv(id,fallback){
+  const el=document.getElementById(id);
+  const v=el?el.value.trim():'';
+  return v||fallback;
+}
+
+function generateNoScheduleMessages(){
+  const name=document.getElementById('s-name').value.trim();
+  const phone=document.getElementById('s-phone').value.trim();
+  const detail=document.getElementById('s-detail').value.trim();
+  const ins=selectedSlot.entries[0].instructor;
+
+  const day1   = nsv('ns-day1','_');
+  const date1  = nsv('ns-date1','_/_');
+  const time1  = nsv('ns-time1','_');
+  const freq   = nsv('ns-freq','_');
+  const dur    = nsv('ns-dur','_시간');
+  const sday   = nsv('ns-startday','_');
+  const sdate  = nsv('ns-startdate','_월 _일');
+
+  const dayLabel = `${day1}요일 ${time1}시`;
+  const insDateLabel = `${date1} ${day1}요일 ${time1}시`;
+
+  const msg1=`신규(${name}님) ${insDateLabel} 있습니다.`;
+  const msg3=`[수업일정 확정 안내]
+매주 주${freq}회, ${dur}씩
+${dayLabel}
+
+수업 시작일은 ${sdate}(${sday}요일)입니다.
+
+* 수업장소 : 라이언멤버스 교실
+벽산E오렌지프라자 5층 542호, 535호 (짐보리 옆)
+http://naver.me/GVbfXaul`;
+  const msg6=`수업일정 확정
+${name} ${phone}
+
+매주 주${freq}회, ${dur}씩
+${dayLabel}
+
+수업 시작일은 ${sdate}(${sday}요일)입니다.
+
+상세정보
+${detail||'(상세정보 없음)'}`;
+
+  const msgs=[
+    {label:'① 강사 1차 안내',type:'ins',to:ins.name,body:msg1},
+    {label:'② 학생 확정 — 수업일정',type:'stu',to:name,body:msg3},
+    {label:'③ 학생 확정 — 강사 프로필',type:'stu',to:name,body:ins.profile},
+    {label:'④ 학생 확정 — 공통 이미지',type:'stu',to:name,body:'📎 공통 안내 이미지를 카카오톡에서 별도 첨부해주세요.'},
+    {label:'⑤ 강사 확정 메세지',type:'ins',to:ins.name,body:msg6},
+  ];
+  const c=document.getElementById('messagesOutput'); c.innerHTML='';
   msgs.forEach((m,i)=>{
     const b=document.createElement('div'); b.className='msg-block';
     b.innerHTML=`<div class="msg-header"><span>${m.label}</span><span class="msg-tag ${m.type}">→ ${m.to} (${m.type==='ins'?'강사':'학생'})</span></div><div class="msg-body" id="mb${i}">${esc(m.body)}</div><div class="msg-actions"><button class="btn-copy" id="cb${i}" onclick="copyMsg(${i})">복사</button></div>`;
