@@ -126,6 +126,14 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
 .paste-hint{font-size:12px;color:var(--accent2);margin-top:8px;text-align:center}
 .home-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;background:var(--surface);border:1.5px solid #e0e0e0;border-radius:20px;font-size:12px;color:var(--muted);cursor:pointer;font-family:inherit;margin-bottom:16px;transition:all .15s}
 .home-btn:hover{border-color:var(--border);color:var(--border)}
+.step-nav{display:flex;gap:8px;margin-bottom:20px;align-items:center;flex-wrap:wrap}
+.step-nav .snav{padding:5px 14px;background:var(--surface);border:1.5px solid #e0e0e0;border-radius:20px;font-size:12px;color:var(--muted);cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.step-nav .snav:hover{border-color:var(--border);color:var(--border)}
+.time-chip{-webkit-user-select:none;user-select:none}
+.time-chip.selecting{background:var(--accent2);border-color:var(--accent2);color:#fff}
+.manual-input-box{border:2px dashed #e0e0e0;border-radius:6px;padding:16px;margin-top:12px;background:#fafafa}
+.manual-input-box.visible{display:block}
+.no-sched-msg{background:#fff8e1;border-left:3px solid #f9a825;padding:10px 14px;font-size:13px;border-radius:0 4px 4px 0;margin:8px 0}
 .mode-bar{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
 .mode-btn{flex:1;min-width:120px;padding:12px 8px;border:2px solid #e0e0e0;border-radius:6px;background:#fff;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;color:var(--muted);transition:all .15s;text-align:center}
 .mode-btn:hover{border-color:var(--accent2);color:var(--border)}
@@ -247,13 +255,18 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
       </div>
     </div>
 
-    <div style="display:flex;justify-content:flex-end">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <button class="btn btn-ghost" onclick="goNoSchedule()" style="font-size:12px">📝 일정 없이 메세지만 생성</button>
       <button class="btn btn-primary" id="step1-next-btn" onclick="goNextFromStep1()">일정 추천 받기 →</button>
     </div>
   </div>
 
   <!-- STEP 2 -->
   <div id="step2" style="display:none">
+    <div class="step-nav">
+      <button class="snav" onclick="document.querySelector('header nav button').click()">🏠 홈</button>
+      <button class="snav" onclick="setStep(1)">← STEP 1</button>
+    </div>
     <div class="card">
       <div class="card-title">일정 찾기 방법 선택</div>
       <div class="mode-bar">
@@ -306,6 +319,27 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
       <div class="card-title">AI 분석 결과 <span style="font-size:11px;font-weight:400;color:var(--muted)">— 클릭해서 추천에 직접 추가</span></div>
       <div id="aiSlotList"></div>
     </div>
+    <div class="card" id="manualSlotCard" style="display:none">
+      <div class="card-title">✏️ 수동으로 슬롯 직접 추가</div>
+      <div class="no-sched-msg">AI 분석 실패 또는 스크린샷 없이 직접 슬롯을 입력할 수 있습니다.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div class="form-group" style="margin:0">
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">강사</label>
+          <select id="manual-ins" style="padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:3px;font-size:13px;font-family:inherit"></select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">요일</label>
+          <select id="manual-day" style="padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:3px;font-size:13px;font-family:inherit">
+            <option>월</option><option>화</option><option>수</option><option>목</option><option>금</option><option>토</option><option>일</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">시간</label>
+          <input type="text" id="manual-time" placeholder="예: 10:00" style="padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:3px;font-size:13px;width:90px;font-family:'DM Mono',monospace">
+        </div>
+        <button class="btn btn-accent btn-sm" onclick="addManualSlot()">+ 추가</button>
+      </div>
+    </div>
 
     <div class="card">
       <div class="card-title">추천 일정 <span style="font-size:12px;font-weight:400;color:var(--muted)">— 클릭해서 선택</span></div>
@@ -318,14 +352,18 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
         <textarea id="s-detail" placeholder="예: 해운대 거주 20대 여성, 대학원 재학 중. 해외유학 고려 중이며 영어회화 실력 향상 희망..."></textarea>
       </div>
     </div>
-    <div style="display:flex;justify-content:space-between;margin-top:8px">
-      <button class="btn btn-ghost" onclick="setStep(1)">← 뒤로</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap;gap:8px">
+      <button class="btn btn-ghost btn-sm" onclick="toggleManualCard()" id="manualToggleBtn">✏️ 수동 입력</button>
       <button class="btn btn-primary" onclick="goStep3()">메세지 생성 →</button>
     </div>
   </div>
 
   <!-- STEP 3 -->
   <div id="step3" style="display:none">
+    <div class="step-nav">
+      <button class="snav" onclick="document.querySelector('header nav button').click()">🏠 홈</button>
+      <button class="snav" onclick="setStep(2)">← STEP 2</button>
+    </div>
     <div class="card">
       <div class="card-title">수업 시작일 & 발송 방식</div>
       <div id="startdate-wrap"></div>
@@ -335,6 +373,10 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
           <option value="single">단일 일정 확정 안내</option>
           <option value="multi">복수 선택지 제공</option>
         </select>
+      </div>
+      <div style="margin-top:14px">
+        <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">수업 일정 직접 수정 (선택사항)</div>
+        <div id="schedDirectEdit" style="font-size:13px;color:var(--muted)">일정 선택 후 표시됩니다.</div>
       </div>
       <!-- 비고정식 복수선택지: 두 번째 슬롯 -->
       <div id="flex-multi-wrap" style="display:none;margin-top:14px">
@@ -629,7 +671,6 @@ function renderDayTimeRows(){
       const chip=document.createElement('div');
       chip.className='time-chip'+(existing[day]&&existing[day].includes(t)?' on':'');
       chip.dataset.t=t; chip.textContent=t;
-      chip.onclick=()=>chip.classList.toggle('on');
       chips.appendChild(chip);
     });
     // 직접입력 칩
@@ -649,7 +690,6 @@ function renderDayTimeRows(){
             const chip=document.createElement('div');
             chip.className='time-chip on';
             chip.dataset.t=val; chip.textContent=val;
-            chip.onclick=()=>chip.classList.toggle('on');
             chips.appendChild(chip);
           }
           this.value='';
@@ -659,6 +699,23 @@ function renderDayTimeRows(){
         }
       }
     });
+    // 클릭 + 드래그 동시 지원
+    let dragOn=false, dragMode=null;
+    chips.addEventListener('mousedown',function(e){
+      const chip=e.target.closest('.time-chip');
+      if(!chip)return;
+      e.preventDefault(); // click 이벤트 발화 방지
+      dragOn=true;
+      dragMode=chip.classList.contains('on')?'off':'on';
+      chip.classList.toggle('on',dragMode==='on');
+    });
+    chips.addEventListener('mouseover',function(e){
+      if(!dragOn)return;
+      const chip=e.target.closest('.time-chip');
+      if(chip) chip.classList.toggle('on',dragMode==='on');
+    });
+    document.addEventListener('mouseup',function(){dragOn=false;},{once:false,passive:true});
+
     row.appendChild(lbl); row.appendChild(chips); row.appendChild(directInput); container.appendChild(row);
   });
 }
@@ -932,6 +989,51 @@ function syncFlexSlot2Direct(){
 function syncFlexSlot2Select(val){
   if(/^\d{2}:\d{2}$/.test(val)){const sel=document.getElementById('flex-slot2-select');if(sel)sel.value='';}
 }
+// 일정없이 메세지 생성
+function goNoSchedule(){
+  const name=document.getElementById('s-name').value.trim();
+  const phone=document.getElementById('s-phone').value.trim();
+  if(!name||!phone)return alert('학생 이름과 전화번호는 필수입니다.');
+  // 더미 슬롯 생성 (날짜/시간 플레이스홀더)
+  const directIds=Array.from(document.querySelectorAll('#s-instructor-direct input:checked')).map(i=>i.value);
+  const ins=directIds.length>0?instructors.find(i=>i.id===directIds[0]):instructors[0];
+  if(!ins)return alert('강사를 먼저 선택해주세요.');
+  selectedSlot={
+    entries:[{instructor:ins,day:'_',time:'_'}],
+    multiInstructor:false,score:0,label:'직접 입력 필요',noSchedule:true
+  };
+  setStep(3);
+  const wrap=document.getElementById('startdate-wrap');
+  wrap.innerHTML='<div class="no-sched-msg">📝 날짜와 시간을 아래 메세지에서 직접 수정하세요.</div>';
+  generateMessages();
+  resetChecklist();
+}
+
+function toggleManualCard(){
+  const card=document.getElementById('manualSlotCard');
+  const btn=document.getElementById('manualToggleBtn');
+  const visible=card.style.display!=='none'&&card.style.display!=='';
+  card.style.display=visible?'none':'block';
+  btn.textContent=visible?'✏️ 수동 입력':'✏️ 수동 입력 닫기';
+  // 강사 셀렉트 채우기
+  if(!visible){
+    const sel=document.getElementById('manual-ins');
+    sel.innerHTML='';
+    instructors.forEach(ins=>sel.innerHTML+=`<option value="${ins.id}">${ins.name}</option>`);
+  }
+}
+
+function addManualSlot(){
+  const insId=document.getElementById('manual-ins').value;
+  const day=document.getElementById('manual-day').value;
+  const time=document.getElementById('manual-time').value.trim();
+  if(!time||!/^\d{2}:\d{2}$/.test(time))return alert('시간을 HH:MM 형식으로 입력하세요. 예: 10:00');
+  const ins=instructors.find(i=>i.id===insId);
+  if(!ins)return;
+  injectAISlot({day,time,instructorName:ins.name},true);
+  document.getElementById('manual-time').value='';
+}
+
 function goNextFromStep1(){
   const name=document.getElementById('s-name').value.trim();
   const phone=document.getElementById('s-phone').value.trim();
@@ -1182,6 +1284,19 @@ function getNextMonStr(){
 function renderStartDateInputs(){
   const wrap=document.getElementById('startdate-wrap');
   if(!wrap||!selectedSlot)return;
+  // schedDirectEdit 업데이트
+  const editEl=document.getElementById('schedDirectEdit');
+  if(editEl&&!selectedSlot.noSchedule){
+    const entries=selectedSlot.entries;
+    editEl.innerHTML=entries.map((e,i)=>`
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:13px;color:var(--border);font-weight:600;min-width:50px">${e.day}요일</span>
+        <input type="text" id="sched-edit-${i}" value="${e.time}" placeholder="HH:MM"
+          style="width:80px;padding:6px 8px;border:1.5px solid #e0e0e0;border-radius:3px;font-size:13px;font-family:'DM Mono',monospace"
+          oninput="onSchedEditChange()">
+        <span style="font-size:12px;color:var(--muted)">${fmtTime(e.time)}</span>
+      </div>`).join('');
+  }
   const entries=selectedSlot.entries;
   const allSameIns=new Set(entries.map(e=>e.instructor.id)).size===1;
   const nextMon=getNextMonStr();
@@ -1201,6 +1316,16 @@ function renderStartDateInputs(){
   }
 }
 
+function onSchedEditChange(){
+  if(!selectedSlot)return;
+  selectedSlot.entries.forEach((e,i)=>{
+    const el=document.getElementById('sched-edit-'+i);
+    if(el&&/^\d{2}:\d{2}$/.test(el.value.trim())) e.time=el.value.trim();
+  });
+  selectedSlot.label=selectedSlot.entries.map(e=>`${e.day}요일 ${fmtTime(e.time)}`).join(' / ');
+  generateMessages();
+}
+
 function getStartDates(){
   if(!selectedSlot)return[''];
   const entries=selectedSlot.entries;
@@ -1217,6 +1342,11 @@ function getStartDates(){
 }
 
 function generateMessages(){
+  // 일정없이 메세지 생성
+  if(selectedSlot&&selectedSlot.noSchedule){
+    generateNoScheduleMessages();
+    return;
+  }
   // 비고정식 처리
   if(lessonType==='flex'){
     generateFlexMessages();
@@ -1249,8 +1379,13 @@ function generateMessages(){
     } else {
       msg2=`일정 조율 안내드립니다 :)\n아래 중 편하신 시간 선택해 주세요!\n\n1) ${oneLiner}\n2) (추가 옵션을 여기에 입력하세요)\n\n${startFmt}부터 시작 예정입니다.`;
     }
-    const msg3=`[수업일정 확정 안내]\n매주 주${freq}회, ${durLabel}씩\n${dayLabels} ${timeLabels}\n\n수업 시작일은 ${startFmt}입니다.\n\n* 수업장소 : 라이언멤버스 교실\n벽산E오렌지프라자 5층 542호, 535호 (짐보리 옆)\nhttp://naver.me/GVbfXaul`;
-    const msg6=`수업일정 확정\n${name} ${phone}\n\n매주 주${freq}회, ${durLabel}씩\n${dayLabels} ${timeLabels}\n\n수업 시작일은 ${startFmt}입니다.\n\n상세정보\n${detail||'(상세정보 없음)'}`;
+    // 요일별 시간 다를 때 각각 표기
+    const allSameTime=new Set(entries.map(e=>e.time)).size===1;
+    const schedLine=allSameTime
+      ?`${dayLabels} ${timeLabels}`
+      :entries.map(e=>`${e.day}요일 ${fmtTime(e.time)}`).join('\n');
+    const msg3=`[수업일정 확정 안내]\n매주 주${freq}회, ${durLabel}씩\n${schedLine}\n\n수업 시작일은 ${startFmt}입니다.\n\n* 수업장소 : 라이언멤버스 교실\n벽산E오렌지프라자 5층 542호, 535호 (짐보리 옆)\nhttp://naver.me/GVbfXaul`;
+    const msg6=`수업일정 확정\n${name} ${phone}\n\n매주 주${freq}회, ${durLabel}씩\n${schedLine}\n\n수업 시작일은 ${startFmt}입니다.\n\n상세정보\n${detail||'(상세정보 없음)'}`;
     msgs.push({label:'① 강사 1차 안내',type:'ins',to:ins.name,body:msg1});
     msgs.push({label:'② 학생 일정 제안',type:'stu',to:name,body:msg2});
     msgs.push({label:'③ 학생 확정 — 수업일정',type:'stu',to:name,body:msg3});
@@ -1372,6 +1507,55 @@ ${detail||'(상세정보 없음)'}`;
   msgs.push({label:(offerChoice==='single'?'⑤':'⑥')+' 강사 확정 메세지',type:'ins',to:ins.name,body:msg6});
 
   const c=document.getElementById('messagesOutput'); c.innerHTML='';
+  msgs.forEach((m,i)=>{
+    const b=document.createElement('div'); b.className='msg-block';
+    b.innerHTML=`<div class="msg-header"><span>${m.label}</span><span class="msg-tag ${m.type}">→ ${m.to} (${m.type==='ins'?'강사':'학생'})</span></div><div class="msg-body" id="mb${i}">${esc(m.body)}</div><div class="msg-actions"><button class="btn-copy" id="cb${i}" onclick="copyMsg(${i})">복사</button></div>`;
+    c.appendChild(b);
+  });
+  resetChecklist();
+}
+
+function generateNoScheduleMessages(){
+  const name=document.getElementById('s-name').value.trim();
+  const phone=document.getElementById('s-phone').value.trim();
+  const detail=document.getElementById('s-detail').value.trim();
+  const ins=selectedSlot.entries[0].instructor;
+  const freq=document.getElementById('s-freq').value;
+  const dur=document.getElementById('s-duration').value;
+  const durLabel=dur==='1'?'1시간':dur==='1.5'?'1시간 30분':'2시간';
+  // _ 통일 플레이스홀더 (요일 자리에는 요일 안내 포함)
+  const msg1=`신규(${name}님) _/_ _요일 _시 있습니다.`;
+  const msg3=`[수업일정 확정 안내]
+매주 주${freq}회, ${durLabel}씩
+_요일 _시
+
+수업 시작일은 _월 _일 _요일입니다.
+
+* 수업장소 : 라이언멤버스 교실
+벽산E오렌지프라자 5층 542호, 535호 (짐보리 옆)
+http://naver.me/GVbfXaul`;
+  const msg6=`수업일정 확정
+${name} ${phone}
+
+매주 주${freq}회, ${durLabel}씩
+_요일 _시
+
+수업 시작일은 _월 _일 _요일입니다.
+
+상세정보
+${detail||'(상세정보 없음)'}`;
+  const msgs=[
+    {label:'① 강사 1차 안내',type:'ins',to:ins.name,body:msg1},
+    {label:'② 학생 확정 — 수업일정',type:'stu',to:name,body:msg3},
+    {label:'③ 학생 확정 — 강사 프로필',type:'stu',to:name,body:ins.profile},
+    {label:'④ 학생 확정 — 공통 이미지',type:'stu',to:name,body:'📎 공통 안내 이미지를 카카오톡에서 별도 첨부해주세요.'},
+    {label:'⑤ 강사 확정 메세지',type:'ins',to:ins.name,body:msg6},
+  ];
+  const c=document.getElementById('messagesOutput'); c.innerHTML='';
+  const notice=document.createElement('div');
+  notice.className='no-sched-msg';
+  notice.textContent='📝 _ 자리를 카카오톡에서 직접 수정 후 발송하세요. (요일: 월/화/수/목/금/토/일 중 한 글자)';
+  c.appendChild(notice);
   msgs.forEach((m,i)=>{
     const b=document.createElement('div'); b.className='msg-block';
     b.innerHTML=`<div class="msg-header"><span>${m.label}</span><span class="msg-tag ${m.type}">→ ${m.to} (${m.type==='ins'?'강사':'학생'})</span></div><div class="msg-body" id="mb${i}">${esc(m.body)}</div><div class="msg-actions"><button class="btn-copy" id="cb${i}" onclick="copyMsg(${i})">복사</button></div>`;
@@ -1692,8 +1876,8 @@ async function runAIForCache(images, statusEl){
 
     const resp=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:contentArr}]})
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-calls':'true'},
+      body:JSON.stringify({model:'claude-haiku-4-5',max_tokens:2000,messages:[{role:'user',content:contentArr}]})
     });
     const data=await resp.json();
     if(data.error)throw new Error(data.error.message);
