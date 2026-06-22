@@ -263,7 +263,6 @@ body.drag-selecting .time-chip{transition:none}
       </div>
     </div>
 
-      </div><!-- /fixed-fields -->
       <!-- 비고정식: 강사 지정 안내 -->
       <div id="flex-fields" style="display:none">
         <div class="notice" style="margin-top:4px">비고정식은 담당 강사를 위에서 지정해주세요. 다음 단계에서 강사의 빈 시간을 확인해 첫 수업 슬롯을 선택합니다.</div>
@@ -610,9 +609,22 @@ function changePw(){
 function showPage(id,btn){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('header nav button').forEach(b=>b.classList.remove('active'));
-  document.getElementById('page-'+id).classList.add('active');
-  btn.classList.add('active');
-  window.scrollTo({top:0,behavior:'smooth'});
+
+  const target=document.getElementById('page-'+id);
+  if(target) target.classList.add('active');
+  if(btn) btn.classList.add('active');
+
+  // 상단 메뉴 이동 시 이전 스크롤 위치가 남아 아래쪽 내용이 보이는 문제 방지
+  document.documentElement.scrollTop=0;
+  document.body.scrollTop=0;
+  window.scrollTo(0,0);
+  requestAnimationFrame(()=>window.scrollTo(0,0));
+
+  if(id==='instructors' && typeof renderInsGrid==='function') renderInsGrid();
+  if(id==='settings'){
+    if(typeof initRangeSelector==='function') initRangeSelector();
+    if(typeof initAnthropicKeyDisplay==='function') initAnthropicKeyDisplay();
+  }
 }
 
 // ── CHECKBOX HELPERS
@@ -1305,10 +1317,10 @@ function goStep3(){
   if(lessonType==='flex'){
     const e=selectedSlot.entries[0];
     const wrap=document.getElementById('startdate-wrap');
-    const nextMon=getNextMonStr();
+    const defaultStart=getDefaultStartDateForEntries([e]);
     wrap.innerHTML=
       '<div class="form-row col2">'+
-      '<div class="form-group"><label>첫 수업 날짜 *</label><input type="date" id="s-startdate-0" value="'+nextMon+'" onchange="generateMessages()"></div>'+
+      '<div class="form-group"><label>첫 수업 날짜 * <span style="font-size:11px;color:var(--muted);font-weight:400">오늘 제외 가장 가까운 선택요일 자동입력</span></label><input type="date" id="s-startdate-0" value="'+defaultStart+'" onchange="generateMessages()"></div>'+
       '<div class="form-group"><label>첫 수업 시각</label>'+
       '<div class="flex-time-wrap">'+
       '<select id="flex-slot1-select" onchange="syncFlexSlot1Direct()"><option value="">선택</option>'+
@@ -1529,11 +1541,37 @@ function getInsGroups(entries){
   return order.map(id=>map[id]);
 }
 
+function formatDateInputLocal(d){
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,'0');
+  const day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
 function getNextMonStr(){
   const today=new Date();
+  today.setHours(0,0,0,0);
   const diff=(8-today.getDay())%7||7;
   const next=new Date(today); next.setDate(today.getDate()+diff);
-  return next.toISOString().split('T')[0];
+  return formatDateInputLocal(next);
+}
+function getNextDateForWeekdays(days){
+  const targets=[...new Set((days||[]).map(d=>DAY_KO.indexOf(d)).filter(n=>n>=0))];
+  if(targets.length===0)return getNextMonStr();
+  const today=new Date();
+  today.setHours(0,0,0,0);
+  const todayDow=today.getDay();
+  let bestDiff=8;
+  targets.forEach(dow=>{
+    let diff=(dow-todayDow+7)%7;
+    if(diff===0)diff=7; // 오늘은 제외하고 다음 선택 요일을 기본값으로 사용
+    if(diff<bestDiff)bestDiff=diff;
+  });
+  const next=new Date(today);
+  next.setDate(today.getDate()+bestDiff);
+  return formatDateInputLocal(next);
+}
+function getDefaultStartDateForEntries(entries){
+  return getNextDateForWeekdays((entries||[]).map(e=>e.day));
 }
 
 function renderStartDateInputs(){
@@ -1554,17 +1592,18 @@ function renderStartDateInputs(){
   }
   const entries=selectedSlot.entries;
   const allSameIns=new Set(entries.map(e=>e.instructor.id)).size===1;
-  const nextMon=getNextMonStr();
+  const defaultStart=getDefaultStartDateForEntries(entries);
   if(allSameIns){
-    wrap.innerHTML='<div class="form-row col2"><div class="form-group"><label>수업 시작일 *</label><input type="date" id="s-startdate-0" value="'+nextMon+'" onchange="generateMessages()"></div></div>';
+    wrap.innerHTML='<div class="form-row col2"><div class="form-group"><label>수업 시작일 * <span style="font-size:11px;color:var(--muted);font-weight:400">오늘 제외 가장 가까운 선택요일 자동입력</span></label><input type="date" id="s-startdate-0" value="'+defaultStart+'" onchange="generateMessages()"></div></div>';
   } else {
     const groups=getInsGroups(entries);
     let html='<div style="margin-bottom:10px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">강사별 수업 시작일</div>';
     groups.forEach((g,i)=>{
       const gLabel=g.entries.map(e=>e.day+'요일').join(', ');
+      const groupDefaultStart=getDefaultStartDateForEntries(g.entries);
       html+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;padding:10px 14px;border:1.5px solid #e0e0e0;border-radius:4px;background:#fafafa">'
         +'<span style="min-width:170px;font-size:13px;font-weight:600">'+g.ins.name.split(' ')[0]+' <span style="font-weight:400;color:var(--muted)">('+gLabel+')</span></span>'
-        +'<input type="date" id="s-startdate-'+i+'" value="'+nextMon+'" onchange="generateMessages()" style="padding:7px 10px;border:1.5px solid #e0e0e0;border-radius:3px;font-size:13px;font-family:inherit">'
+        +'<input type="date" id="s-startdate-'+i+'" value="'+groupDefaultStart+'" onchange="generateMessages()" style="padding:7px 10px;border:1.5px solid #e0e0e0;border-radius:3px;font-size:13px;font-family:inherit">'
         +'</div>';
     });
     wrap.innerHTML=html;
@@ -2231,12 +2270,11 @@ async function runFindSlots(){
   label.textContent='⏳ AI 분석 중...';
   document.getElementById('slotResults').innerHTML='<div class="empty">AI 분석 중...</div>';
 
-  // 스크린샷 AI는 “추천 생성기”가 아니라 “기존수업 busy 판독기”로 사용한다.
-  // 실제 추천은 computeSlots()가 학생 조건과 강사 설정을 기준으로 다시 계산한다.
-  await runAIForCache(pastedImages, null);
+  const aiResult=await runAIForCache(pastedImages, null);
   const computed=computeSlots();
   computed.forEach(s=>{if(!s.source)s.source='ai';});
-  renderSlotResults(computed);
+  const directAI=buildAISuggestionsFromFreeGroups(aiResult.freeGroups||[]);
+  renderSlotResults([...directAI,...computed]);
 }
 
 // AI 분석 → icsCache 주입 공통 함수
