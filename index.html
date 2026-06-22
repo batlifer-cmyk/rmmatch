@@ -508,7 +508,18 @@ body.drag-selecting .time-chip{transition:none}
         <label>가능 요일</label><div class="check-group" id="modal-days"></div>
       </div>
       <div class="form-group" style="margin-bottom:16px">
-        <label>가능 시간대</label><div class="time-grid" id="modal-times"></div>
+        <label>가능 시간대 — 공통 기본값</label>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:8px">요일별 세부 설정이 비어 있는 요일은 아래 공통 시간대를 사용합니다.</div>
+        <div class="time-grid" id="modal-times"></div>
+      </div>
+      <div class="form-group" style="margin-bottom:16px">
+        <label>요일별 세부 시간 설정</label>
+        <div class="notice" style="margin-bottom:10px">특정 요일만 다른 시간대가 가능한 강사는 여기서 요일별로 지정하세요. 해당 요일에 하나라도 선택된 시간이 있으면 공통 시간대보다 요일별 시간이 우선 적용됩니다.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="applyCommonTimesToModalDays()">공통 시간 → 선택 요일 전체 적용</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="clearModalDayTimes()">요일별 설정 비우기</button>
+        </div>
+        <div id="modal-daytime-rows"></div>
       </div>
       <div class="form-group" style="margin-bottom:16px">
         <label>담당 가능 과목</label><div class="check-group" id="modal-subjects"></div>
@@ -573,7 +584,7 @@ function refreshInsSel(){
     const inp=document.createElement('input');
     inp.type='checkbox'; inp.value=ins.id;
     inp.style.display='none';
-    lbl.onclick=()=>{inp.checked=!inp.checked;lbl.classList.toggle('checked',inp.checked);};
+    lbl.onclick=()=>{inp.checked=!inp.checked;lbl.classList.toggle('checked',inp.checked);if(cid==='modal-days')renderModalDayTimeRows();};
     lbl.appendChild(inp); lbl.appendChild(document.createTextNode(ins.name));
     el.appendChild(lbl);
   });
@@ -746,6 +757,8 @@ function renderDayTimeRows(){
 
 // 시간칩 선택 전용 엔진: 클릭 단일 선택/해제 + 드래그 선택/해제를 분리한다.
 function enableTimeChipSelection(chips){
+  if(!chips||chips.dataset.dragEnabled==='1')return;
+  chips.dataset.dragEnabled='1';
   let dragActive=false;
   let dragMode=null; // 'on' | 'off'
   let lastChip=null;
@@ -835,6 +848,17 @@ function renderTimeSlots(cid,selected){
 }
 function getSelTimes(cid){
   return Array.from(document.querySelectorAll(`#${cid} .time-slot.selected`)).map(e=>e.textContent);
+}
+
+function getInstructorTimesForDay(ins,day){
+  if(ins&&ins.dayTimes&&Array.isArray(ins.dayTimes[day])&&ins.dayTimes[day].length>0) return ins.dayTimes[day];
+  return (ins&&Array.isArray(ins.times))?ins.times:[];
+}
+function summarizeInstructorAvailability(ins){
+  const base=(ins.times&&ins.times.length)?`${ins.times[0]}~${ins.times[ins.times.length-1]}`:'공통시간 없음';
+  const dt=ins.dayTimes||{};
+  const overrides=DAYS.filter(d=>dt[d]&&dt[d].length).map(d=>`${d} ${dt[d][0]}~${dt[d][dt[d].length-1]}`);
+  return `${ins.days.join(' ')} | 공통 ${base}${overrides.length?' | 요일별 '+overrides.join(' · '):''}`;
 }
 
 function getDirectInstructorIds(){
@@ -982,7 +1006,7 @@ function computeSlots(){
       const dayOptions=combo.map(day=>{
         // 학생이 특정 시간을 요청했더라도, 그 시간이 안 되면 같은 요일의 다른 시간도 대안으로 보여줘야 한다.
         // 정확히 일치하는 시간은 아래 scoring/classification 단계에서 우선권을 받는다.
-        const cand=ins.times;
+        const cand=getInstructorTimesForDay(ins,day);
         return{day,cand};
       });
       if(dayOptions.some(o=>o.cand.length===0))return;
@@ -1003,7 +1027,7 @@ function computeSlots(){
       cands.forEach(ins=>{
         if(!ins.days.includes(day))return;
         // 2인 병행 후보도 학생 요청시간에만 고정하지 않고 같은 요일 내 시간 조정안을 허용한다.
-        const times=ins.times;
+        const times=getInstructorTimesForDay(ins,day);
         times.forEach(t=>{
           if(!isConflict(ins.id,day,t)) daySlots[day].push({instructor:ins,day,time:t});
         });
@@ -1255,7 +1279,7 @@ function computeFlexSlots(){
   const results=[];
   cands.forEach(ins=>{
     ins.days.forEach(day=>{
-      ins.times.forEach(time=>{
+      getInstructorTimesForDay(ins,day).forEach(time=>{
         if(!isConflict(ins.id,day,time)){
           results.push({entries:[{instructor:ins,day,time}],multiInstructor:false,score:10,label:day+'요일 '+fmtTime(time)});
         }
@@ -1468,7 +1492,7 @@ function getAvailabilityWarnings(){
     requestedDays.forEach(day=>{
       const times=dayTimeMap[day]||[];
       times.forEach(t=>{
-        if(!ins.days.includes(day)||!ins.times.includes(t))impossible.push(day+'요일 '+t);
+        if(!ins.days.includes(day)||!getInstructorTimesForDay(ins,day).includes(t))impossible.push(day+'요일 '+t);
       });
     });
     if(impossible.length){
@@ -1996,7 +2020,7 @@ function renderInsGrid(){
   const grid=document.getElementById('instructorGrid'); grid.innerHTML='';
   instructors.forEach(ins=>{
     const card=document.createElement('div'); card.className='ins-card';
-    card.innerHTML=`<button class="edit-btn" onclick="openModal('${ins.id}');event.stopPropagation()">편집</button><div class="iname">${ins.name}</div><div class="isub">${ins.days.join(' ')} | ${ins.times[0]||'-'}~${ins.times[ins.times.length-1]||'-'}</div><div style="margin-top:8px">${ins.subjects.map(s=>`<span class="badge">${s}</span>`).join('')}</div>`;
+    card.innerHTML=`<button class="edit-btn" onclick="openModal('${ins.id}');event.stopPropagation()">편집</button><div class="iname">${ins.name}</div><div class="isub">${summarizeInstructorAvailability(ins)}</div><div style="margin-top:8px">${ins.subjects.map(s=>`<span class="badge">${s}</span>`).join('')}</div>`;
     grid.appendChild(card);
   });
 }
@@ -2010,7 +2034,8 @@ function openModal(id){
   document.getElementById('modal-calid').value=ins.calId||'';
   document.getElementById('modal-profile').value=ins.profile||'';
   renderCheckGroup('modal-days',DAYS,ins.days);
-  renderTimeSlots('modal-times',ins.times);
+  renderTimeSlots('modal-times',ins.times||[]);
+  renderModalDayTimeRows(ins.dayTimes||{});
   renderCheckGroup('modal-subjects',SUBJECTS,ins.subjects);
   mTab('availability',document.querySelector('#instructorModal .tab'));
   document.getElementById('instructorModal').classList.add('open');
@@ -2022,11 +2047,91 @@ function mTab(t,btn){
   document.querySelectorAll('#instructorModal .tab').forEach(x=>x.classList.remove('active'));
   if(btn)btn.classList.add('active');
 }
+
+function renderModalDayTimeRows(savedDayTimes){
+  const container=document.getElementById('modal-daytime-rows');
+  if(!container)return;
+  const prev={};
+  container.querySelectorAll('.modal-day-time-row').forEach(row=>{
+    prev[row.dataset.day]=Array.from(row.querySelectorAll('.time-chip.on')).map(c=>c.dataset.t);
+  });
+  const selectedDays=getChecked('modal-days');
+  container.innerHTML='';
+  if(!selectedDays.length){
+    container.innerHTML='<div class="empty" style="padding:18px">가능 요일을 먼저 선택하세요.</div>';
+    return;
+  }
+  const data=savedDayTimes||prev;
+  selectedDays.forEach(day=>{
+    const row=document.createElement('div');
+    row.className='day-time-row modal-day-time-row';
+    row.dataset.day=day;
+    const lbl=document.createElement('span');
+    lbl.className='dlabel';
+    lbl.textContent=day+'요일 전용 가능 시간';
+    const chips=document.createElement('div');
+    chips.className='day-time-chips';
+    const selected=(prev[day]&&prev[day].length?prev[day]:(data[day]||[]));
+    TIMES.forEach(t=>{
+      const chip=document.createElement('div');
+      chip.className='time-chip'+(selected.includes(t)?' on':'');
+      chip.dataset.t=t; chip.textContent=t;
+      chips.appendChild(chip);
+    });
+    enableTimeChipSelection(chips);
+    const directInput=document.createElement('input');
+    directInput.type='text';
+    directInput.className='time-direct-input';
+    directInput.placeholder='직접입력';
+    directInput.maxLength=5;
+    directInput.addEventListener('keydown',function(e){
+      if(e.key!=='Enter')return;
+      e.preventDefault();
+      const val=normalizeTimeInput(this.value);
+      if(!val){
+        this.style.borderColor='var(--danger)';
+        setTimeout(()=>this.style.borderColor='',1000);
+        return;
+      }
+      let chip=chips.querySelector(`.time-chip[data-t="${val}"]`);
+      if(!chip){
+        chip=document.createElement('div');
+        chip.className='time-chip on';
+        chip.dataset.t=val; chip.textContent=val;
+        chips.appendChild(chip);
+        enableTimeChipSelection(chips);
+      } else chip.classList.add('on');
+      this.value='';
+    });
+    row.appendChild(lbl); row.appendChild(chips); row.appendChild(directInput);
+    container.appendChild(row);
+  });
+}
+function getModalDayTimes(){
+  const out={};
+  document.querySelectorAll('#modal-daytime-rows .modal-day-time-row').forEach(row=>{
+    const day=row.dataset.day;
+    const times=Array.from(row.querySelectorAll('.time-chip.on')).map(c=>c.dataset.t).sort();
+    if(times.length)out[day]=times;
+  });
+  return out;
+}
+function applyCommonTimesToModalDays(){
+  const common=getSelTimes('modal-times');
+  if(!common.length)return alert('먼저 공통 시간대를 선택하세요.');
+  const data={};
+  getChecked('modal-days').forEach(d=>data[d]=[...common]);
+  renderModalDayTimeRows(data);
+}
+function clearModalDayTimes(){
+  document.querySelectorAll('#modal-daytime-rows .time-chip.on').forEach(c=>c.classList.remove('on'));
+}
 function saveInstructor(){
   const id=document.getElementById('modal-id').value;
   const ins=instructors.find(i=>i.id===id); if(!ins)return;
   ins.days=getChecked('modal-days');
   ins.times=getSelTimes('modal-times');
+  ins.dayTimes=getModalDayTimes();
   ins.subjects=getChecked('modal-subjects');
   ins.maxConsec=parseInt(document.getElementById('modal-maxconsec').value);
   ins.calId=document.getElementById('modal-calid').value.trim();
