@@ -146,6 +146,8 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
 .range-select{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .range-btn{padding:5px 14px;border:1.5px solid #e0e0e0;border-radius:20px;font-size:12px;cursor:pointer;background:#fff;font-family:inherit;transition:all .15s}
 .range-btn.active{background:var(--border);color:#fff;border-color:var(--border)}
+body.drag-selecting{cursor:grabbing}
+body.drag-selecting .time-chip{transition:none}
 </style>
 </head>
 <body>
@@ -667,13 +669,18 @@ function renderDayTimeRows(){
     row.className='day-time-row'; row.dataset.day=day;
     const lbl=document.createElement('span'); lbl.className='dlabel'; lbl.textContent=day+'요일 가능 시간';
     const chips=document.createElement('div'); chips.className='day-time-chips';
-    TIMES.forEach(t=>{
+
+    const makeChip=(t,on=false)=>{
       const chip=document.createElement('div');
-      chip.className='time-chip'+(existing[day]&&existing[day].includes(t)?' on':'');
+      chip.className='time-chip'+(on?' on':'');
       chip.dataset.t=t; chip.textContent=t;
-      chip.onclick=()=>chip.classList.toggle('on');
-      chips.appendChild(chip);
+      return chip;
+    };
+
+    TIMES.forEach(t=>{
+      chips.appendChild(makeChip(t, !!(existing[day]&&existing[day].includes(t))));
     });
+
     // 직접입력 칩
     const directInput=document.createElement('input');
     directInput.type='text';
@@ -684,15 +691,19 @@ function renderDayTimeRows(){
     directInput.dataset.day=day;
     directInput.addEventListener('keydown',function(e){
       if(e.key==='Enter'){
-        const val=this.value.trim();
-        if(/^\d{2}:\d{2}$/.test(val)){
-          // add as chip if not already present
+        e.preventDefault();
+        let val=this.value.trim();
+        // 930 / 09:30 / 9:30 모두 허용
+        const compact=val.match(/^(\d{1,2})(\d{2})$/);
+        const colon=val.match(/^(\d{1,2}):(\d{2})$/);
+        if(compact) val=compact[1].padStart(2,'0')+':'+compact[2];
+        if(colon) val=colon[1].padStart(2,'0')+':'+colon[2];
+        const [hh,mm]=val.split(':').map(Number);
+        if(/^\d{2}:\d{2}$/.test(val)&&hh>=0&&hh<=23&&mm>=0&&mm<=59){
           if(!chips.querySelector(`.time-chip[data-t="${val}"]`)){
-            const chip=document.createElement('div');
-            chip.className='time-chip on';
-            chip.dataset.t=val; chip.textContent=val;
-            chip.onclick=()=>chip.classList.toggle('on');
-            chips.appendChild(chip);
+            chips.appendChild(makeChip(val,true));
+          } else {
+            chips.querySelector(`.time-chip[data-t="${val}"]`).classList.add('on');
           }
           this.value='';
         } else {
@@ -701,24 +712,55 @@ function renderDayTimeRows(){
         }
       }
     });
-    // 드래그 선택 지원
-    let dragOn=false, dragMode=null;
-    chips.addEventListener('mousedown',function(e){
-      const chip=e.target.closest('.time-chip');
-      if(!chip)return;
-      e.preventDefault();
-      dragOn=true;
-      dragMode=chip.classList.contains('on')?'off':'on';
-      chip.classList.toggle('on',dragMode==='on');
-    });
-    chips.addEventListener('mouseover',function(e){
-      if(!dragOn)return;
-      const chip=e.target.closest('.time-chip');
-      if(chip) chip.classList.toggle('on',dragMode==='on');
-    });
-    document.addEventListener('mouseup',function(){dragOn=false;},{once:false,passive:true});
+
+    enableTimeChipSelection(chips);
 
     row.appendChild(lbl); row.appendChild(chips); row.appendChild(directInput); container.appendChild(row);
+  });
+}
+
+// 시간칩 선택 전용 엔진: 클릭 단일 선택/해제 + 드래그 선택/해제를 분리한다.
+function enableTimeChipSelection(chips){
+  let dragActive=false;
+  let dragMode=null; // 'on' | 'off'
+  let lastChip=null;
+
+  const applyMode=(chip)=>{
+    if(!chip||!chip.classList.contains('time-chip'))return;
+    chip.classList.toggle('on',dragMode==='on');
+    chip.classList.add('selecting');
+    lastChip=chip;
+  };
+  const clearSelecting=()=>{
+    chips.querySelectorAll('.time-chip.selecting').forEach(c=>c.classList.remove('selecting'));
+  };
+  const onPointerMove=(e)=>{
+    if(!dragActive)return;
+    const under=document.elementFromPoint(e.clientX,e.clientY);
+    const chip=under&&under.closest?under.closest('.time-chip'):null;
+    if(chip&&chips.contains(chip)&&chip!==lastChip)applyMode(chip);
+  };
+  const stopDrag=()=>{
+    if(!dragActive)return;
+    dragActive=false;
+    dragMode=null;
+    lastChip=null;
+    document.body.classList.remove('drag-selecting');
+    document.removeEventListener('pointermove',onPointerMove);
+    setTimeout(clearSelecting,80);
+  };
+
+  chips.addEventListener('pointerdown',function(e){
+    const chip=e.target.closest('.time-chip');
+    if(!chip)return;
+    e.preventDefault();
+    dragActive=true;
+    dragMode=chip.classList.contains('on')?'off':'on';
+    document.body.classList.add('drag-selecting');
+    applyMode(chip);
+    document.addEventListener('pointermove',onPointerMove);
+    document.addEventListener('pointerup',stopDrag,{once:true});
+    document.addEventListener('pointercancel',stopDrag,{once:true});
   });
 }
 
@@ -1922,11 +1964,7 @@ function setFindMode(mode){
   document.getElementById('aiAnalysisResult').style.display='none';
   // 둘 다 모드에서도 같은 미리보기 표시
   if(mode==='both'){
-    const src=document.getElementById('aiPreviewList');
-    const dst=document.getElementById('aiPreviewList2');
-    if(src&&dst) dst.innerHTML=src.innerHTML;
-    const lbl=document.getElementById('aiUploadLabel2');
-    if(lbl) lbl.textContent=pastedImages.length>0?'✅ '+pastedImages.length+'장 준비됨':'🖼 스크린샷 추가 (선택사항)';
+    renderAIPreviews();
   }
 }
 
@@ -1961,8 +1999,9 @@ async function runBothFind(){
   await prefetchAllICS();
 
   // 스크린샷도 있으면 AI 분석 후 icsCache 보강
+  let aiResult={freeGroups:[]};
   if(pastedImages.length>0){
-    await runAIForCache(pastedImages, statusEl);
+    aiResult=await runAIForCache(pastedImages, statusEl);
   }
 
   const withUrls=instructors.filter(i=>i.calId).length;
@@ -1972,7 +2011,9 @@ async function runBothFind(){
 
   const bothSlots=computeSlots();
   bothSlots.forEach(s=>{if(!s.source)s.source='both';});
-  renderSlotResults(bothSlots);
+  const directAI=buildAISuggestionsFromFreeGroups(aiResult.freeGroups||[]);
+  directAI.forEach(s=>s.source='both');
+  renderSlotResults([...directAI,...bothSlots]);
 }
 
 // 📸 스크린샷 모드 — AI로 icsCache 채우고 추천
@@ -1980,68 +2021,200 @@ async function runFindSlots(){
   if(pastedImages.length===0){alert('스크린샷을 먼저 추가해주세요.');return;}
   const key=getAnthropicKey();
   if(!key){alert('설정 탭에서 Anthropic API Key를 먼저 입력해주세요.');return;}
-  document.getElementById('aiUploadLabel').textContent='⏳ AI 분석 중...';
+  const label=document.getElementById('aiUploadLabel');
+  label.textContent='⏳ AI 분석 중...';
   document.getElementById('slotResults').innerHTML='<div class="empty">AI 분석 중...</div>';
 
-  // AI로 수업 있는 시간 + 빈 시간 동시 추출 → icsCache 주입 후 추천
-  await runAIForCache(pastedImages, null);
-  const slots=computeSlots();
-  slots.forEach(s=>{if(!s.source)s.source='ai';});
-  renderSlotResults(slots);
+  const aiResult=await runAIForCache(pastedImages, null);
+  const computed=computeSlots();
+  computed.forEach(s=>{if(!s.source)s.source='ai';});
+  const directAI=buildAISuggestionsFromFreeGroups(aiResult.freeGroups||[]);
+  renderSlotResults([...directAI,...computed]);
 }
 
 // AI 분석 → icsCache 주입 공통 함수
 async function runAIForCache(images, statusEl){
   const key=getAnthropicKey();
-  if(!key)return;
+  const empty={freeGroups:[],busyCount:0,rawText:''};
+  if(!key)return empty;
   try{
     const contentArr=[];
     images.forEach(img=>{
       contentArr.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.b64}});
     });
     const insNames=instructors.map(i=>i.name).join(', ');
-    contentArr.push({type:'text',text:'위 캘린더 이미지('+images.length+'장)를 분석해주세요. 네이버/구글 캘린더 좌측 하단 색상 범례로 강사별 색상을 파악하세요. 강사 이름 목록: '+insNames+'. 각 강사의 수업이 있는 시간(busy)과 비어있는 시간(free)을 강사별로 추출하세요. 반드시 아래 JSON 형식만 출력하세요. {"instructors":[{"name":"데이빗","busy":[{"day":"화","time":"14:00"}],"free":[{"day":"월","time":"10:00"}]}]} day는 월화수목금토일, time은 HH:MM 24시간 형식. 색상 구분 불가시 전체 캘린더 기준으로 추출하세요.'});
+    contentArr.push({type:'text',text:
+      '당신은 라이언멤버스 운영팀의 캘린더 판독 보조자입니다. 첨부된 캘린더 스크린샷 '+images.length+'장을 읽고, 강사별 기존 수업(busy)과 비어 보이는 후보 시간(free)을 추출하세요. '+
+      '강사 이름 목록: '+insNames+'. 색상 범례나 캘린더 제목/일정명을 근거로 강사를 매칭하세요. '+
+      '반드시 JSON 객체 하나만 출력하세요. 마크다운, 설명문, 코드펜스는 금지합니다. '+
+      '형식: {"instructors":[{"name":"Matthew Moon","busy":[{"day":"월","time":"10:00","date":"2026-06-22"}],"free":[{"day":"화","time":"14:00","date":"2026-06-23"}]}]} '+
+      'day는 월/화/수/목/금/토/일 중 하나, time은 HH:MM 24시간 형식입니다. 날짜가 보이지 않으면 date는 생략하세요. 확실하지 않은 항목은 넣지 마세요.'
+    });
 
     const resp=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-calls':'true'},
-      body:JSON.stringify({model:'claude-haiku-4-5',max_tokens:2000,messages:[{role:'user',content:contentArr}]})
+      headers:{
+        'Content-Type':'application/json',
+        'x-api-key':key,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      body:JSON.stringify({
+        model:'claude-haiku-4-5',
+        max_tokens:3000,
+        temperature:0,
+        messages:[{role:'user',content:contentArr}]
+      })
     });
-    const data=await resp.json();
-    if(data.error)throw new Error(data.error.message);
-    const text=data.content?.find(c=>c.type==='text')?.text||'';
-    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+    const data=await resp.json().catch(()=>({}));
+    if(!resp.ok||data.error){
+      throw new Error((data.error&&data.error.message)||('Anthropic API 오류: HTTP '+resp.status));
+    }
+    const text=data.content?.filter(c=>c.type==='text').map(c=>c.text).join('\n')||'';
+    const parsed=parseClaudeJSON(text);
 
+    let busyCount=0;
+    let freeGroups=[];
     if(parsed.instructors){
-      // busy → icsCache 주입
       parsed.instructors.forEach(group=>{
-        const ins=instructors.find(i=>
-          i.name.split(' ').some(n=>group.name.includes(n))||
-          group.name.split(' ').some(n=>i.name.includes(n))
-        );
+        const ins=matchInstructorByName(group.name);
         if(!ins)return;
         const busySlots=(group.busy||[]).map(s=>({
-          dow:['일','월','화','수','목','금','토'].indexOf(s.day),
-          hour:parseInt(s.time.split(':')[0]),
-          dateStr:'ai'
-        })).filter(s=>s.dow>=0);
-        // 기존 icsCache와 병합
+          dow:DAY_KO.indexOf(s.day),
+          hour:parseInt(String(s.time||'').split(':')[0]),
+          dateStr:s.date||'ai'
+        })).filter(s=>s.dow>=0&&!Number.isNaN(s.hour));
+        busyCount+=busySlots.length;
         const existing=(icsCache[ins.id]&&icsCache[ins.id].slots)||[];
-        const merged=[...existing,...busySlots];
+        const merged=[...existing,...busySlots].filter((slot,idx,arr)=>
+          idx===arr.findIndex(x=>x.dow===slot.dow&&x.hour===slot.hour&&x.dateStr===slot.dateStr)
+        );
         icsCache[ins.id]={fetched:Date.now(),slots:merged};
       });
-      // free → AI 결과 직접 표시
-      const freeGroups=parsed.instructors.map(g=>({name:g.name,slots:g.free||[]})).filter(g=>g.slots.length>0);
+
+      freeGroups=parsed.instructors.map(g=>({
+        name:g.name,
+        instructor:matchInstructorByName(g.name),
+        slots:(g.free||[]).filter(s=>DAYS.includes(s.day)&&/^\d{1,2}:\d{2}$/.test(String(s.time||''))).map(s=>({
+          ...s,
+          time:String(s.time).split(':')[0].padStart(2,'0')+':'+String(s.time).split(':')[1]
+        }))
+      })).filter(g=>g.slots.length>0);
+
       if(freeGroups.length>0){
         document.getElementById('aiAnalysisResult').style.display='block';
         renderAISlots([],freeGroups);
       }
     }
-    document.getElementById('aiUploadLabel').textContent='✅ 분석 완료';
+
+    const freeCount=freeGroups.reduce((sum,g)=>sum+g.slots.length,0);
+    const doneText='✅ 분석 완료 — 기존수업 '+busyCount+'개, 빈 후보 '+freeCount+'개 감지';
+    const label=document.getElementById('aiUploadLabel');
+    if(label)label.textContent=doneText;
+    if(statusEl){
+      statusEl.style.background='#e8f5e9';statusEl.style.color='#2e7d32';
+      statusEl.innerHTML='<div class="dot" style="background:var(--success)"></div><span>'+doneText+'</span>';
+    }
+    return {freeGroups,busyCount,rawText:text};
   }catch(e){
     console.error(e);
-    document.getElementById('aiUploadLabel').textContent='❌ AI 분석 실패: '+(e.message||'');
+    const msg='❌ AI 분석 실패: '+(e.message||'알 수 없는 오류');
+    const label=document.getElementById('aiUploadLabel');
+    if(label)label.textContent=msg;
+    if(statusEl){
+      statusEl.style.background='#fce4ec';statusEl.style.color='#c62828';
+      statusEl.innerHTML='<div class="dot"></div><span>'+msg+'</span>';
+    }
+    document.getElementById('slotResults').innerHTML='<div class="empty">AI 분석에 실패했습니다.<br>스크린샷을 다시 추가하거나 수동 입력을 사용해주세요.</div>';
+    return empty;
   }
+}
+
+function parseClaudeJSON(text){
+  const cleaned=String(text||'').replace(/```json|```/g,'').trim();
+  try{return JSON.parse(cleaned);}catch(_){/* fall through */}
+  const start=cleaned.indexOf('{');
+  if(start<0)throw new Error('Claude 응답에서 JSON을 찾지 못했습니다.');
+  let depth=0,inString=false,esc=false;
+  for(let i=start;i<cleaned.length;i++){
+    const ch=cleaned[i];
+    if(esc){esc=false;continue;}
+    if(ch==='\\'){esc=true;continue;}
+    if(ch==='"'){inString=!inString;continue;}
+    if(inString)continue;
+    if(ch==='{')depth++;
+    if(ch==='}'){
+      depth--;
+      if(depth===0){
+        return JSON.parse(cleaned.slice(start,i+1));
+      }
+    }
+  }
+  throw new Error('JSON 괄호가 닫히지 않았습니다.');
+}
+
+function matchInstructorByName(name){
+  const raw=String(name||'').toLowerCase().replace(/[^a-z가-힣]/g,'');
+  if(!raw)return null;
+  return instructors.find(i=>{
+    const full=i.name.toLowerCase().replace(/[^a-z가-힣]/g,'');
+    const parts=i.name.toLowerCase().split(/\s+/).filter(Boolean);
+    return raw.includes(full)||full.includes(raw)||parts.some(p=>raw.includes(p.replace(/[^a-z가-힣]/g,'')));
+  })||null;
+}
+
+function buildAISuggestionsFromFreeGroups(freeGroups){
+  const dayTimeMap=getDayTimeMap();
+  const studentDays=Object.keys(dayTimeMap);
+  const freq=lessonType==='flex'?1:parseInt(document.getElementById('s-freq').value||'1');
+  const directIds=Array.from(document.querySelectorAll('#s-instructor-direct input:checked')).map(i=>i.value);
+  const out=[];
+
+  freeGroups.forEach(group=>{
+    const ins=group.instructor||matchInstructorByName(group.name)||(directIds.length?instructors.find(i=>i.id===directIds[0]):instructors[0]);
+    if(!ins)return;
+    let slots=(group.slots||[]).filter(s=>DAYS.includes(s.day)&&/^\d{2}:\d{2}$/.test(s.time));
+    if(studentDays.length>0){
+      slots=slots.filter(s=>studentDays.includes(s.day));
+      slots=slots.filter(s=>{
+        const wanted=dayTimeMap[s.day]||[];
+        return wanted.length===0||wanted.includes(s.time);
+      });
+    }
+    slots=slots.filter(s=>!isConflict(ins.id,s.day,s.time));
+    const byDay={};
+    slots.forEach(s=>{if(!byDay[s.day])byDay[s.day]=[];byDay[s.day].push(s);});
+    const days=Object.keys(byDay);
+    if(days.length<freq)return;
+
+    getCombos(days,freq).slice(0,8).forEach(combo=>{
+      const choices=combo.map(d=>byDay[d].slice(0,4));
+      const build=(idx,current)=>{
+        if(out.length>=16)return;
+        if(idx===choices.length){
+          const entries=current.map(s=>({instructor:ins,day:s.day,time:s.time}));
+          out.push({
+            entries,
+            multiInstructor:false,
+            score:40,
+            source:'ai',
+            aiSuggested:true,
+            label:entries.map(e=>`${e.day}요일 ${fmtTime(e.time)}`).join(' / ')
+          });
+          return;
+        }
+        choices[idx].forEach(s=>build(idx+1,[...current,s]));
+      };
+      build(0,[]);
+    });
+  });
+
+  const seen=new Set();
+  return out.filter(slot=>{
+    const key=slot.entries.map(e=>e.instructor.id+e.day+e.time).join('|');
+    if(seen.has(key))return false;
+    seen.add(key);return true;
+  }).slice(0,12);
 }
 
 // ── AI CALENDAR ANALYSIS
@@ -2057,24 +2230,65 @@ document.addEventListener('paste',function(e){
   const items=e.clipboardData&&e.clipboardData.items;
   if(!items)return;
   for(const item of items){
-    if(item.type.startsWith('image/')){
+    if(item.type&&item.type.startsWith('image/')){
       e.preventDefault();
       const file=item.getAsFile();
-      if(file) addAIImage(file);
+      if(file){
+        const activeArea=findMode==='both'?document.getElementById('aiUploadArea2'):document.getElementById('aiUploadArea');
+        if(activeArea){activeArea.classList.add('paste-ready');setTimeout(()=>activeArea.classList.remove('paste-ready'),700);}
+        addAIImage(file).catch(err=>alert('붙여넣기 이미지 처리 실패: '+(err.message||'')));
+      }
       break;
     }
   }
 });
 
 async function addAIImage(file){
+  if(!file||!String(file.type||'').startsWith('image/')){
+    alert('이미지 파일만 추가할 수 있습니다.');
+    return;
+  }
   if(pastedImages.length>=3){
     alert('최대 3장까지 입력 가능합니다. 초기화 후 다시 시도하세요.');
     return;
   }
-  const b64=await fileToBase64(file);
-  const objectUrl=URL.createObjectURL(file);
-  pastedImages.push({b64,mediaType:file.type||'image/png',objectUrl});
-  renderAIPreviews();
+  try{
+    const prepared=await prepareClaudeImage(file);
+    const objectUrl=URL.createObjectURL(prepared.previewBlob||file);
+    pastedImages.push({b64:prepared.b64,mediaType:prepared.mediaType,objectUrl,name:file.name||'clipboard-image'});
+    renderAIPreviews();
+  }catch(e){
+    console.error(e);
+    alert('이미지 처리에 실패했습니다: '+(e.message||''));
+  }
+}
+
+async function prepareClaudeImage(file){
+  const supported=['image/jpeg','image/png','image/gif','image/webp'];
+  if(supported.includes(file.type)&&file.size<7.5*1024*1024){
+    return {b64:await fileToBase64(file),mediaType:file.type,previewBlob:file};
+  }
+  const blob=await resizeImageBlob(file,1600,0.86);
+  return {b64:await fileToBase64(blob),mediaType:'image/jpeg',previewBlob:blob};
+}
+
+function resizeImageBlob(file,maxSide=1600,quality=.86){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const scale=Math.min(1,maxSide/Math.max(img.width,img.height));
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,Math.round(img.width*scale));
+      canvas.height=Math.max(1,Math.round(img.height*scale));
+      const ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('이미지 압축 실패')),'image/jpeg',quality);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('이미지를 읽을 수 없습니다.'));};
+    img.src=url;
+  });
 }
 
 function renderAIPreviews(){
@@ -2106,9 +2320,22 @@ function renderAIPreviews(){
     wrap.style.display='none';
     document.getElementById('aiUploadLabel').textContent='🖼 클릭 또는 드래그로 추가 (최대 3장)';
   }
-  // 둘 다 모드 동기화
+  // 둘 다 모드 동기화 — innerHTML 복제 대신 삭제 버튼 이벤트까지 다시 바인딩
   if(list2){
-    list2.innerHTML=list.innerHTML;
+    list2.innerHTML='';
+    pastedImages.forEach((img,i)=>{
+      const item=document.createElement('div');
+      item.className='ai-preview-item';
+      const el=document.createElement('img');
+      el.src=img.objectUrl;
+      el.title=(i+1)+'번째 이미지';
+      const del=document.createElement('button');
+      del.className='del-btn';
+      del.textContent='×';
+      del.onclick=(e)=>{e.stopPropagation();pastedImages.splice(i,1);renderAIPreviews();};
+      item.appendChild(el);item.appendChild(del);
+      list2.appendChild(item);
+    });
     const lbl2=document.getElementById('aiUploadLabel2');
     if(lbl2) lbl2.textContent=pastedImages.length>0?'✅ '+pastedImages.length+'장 준비됨 (Ctrl+V로 더 추가)':'🖼 스크린샷 추가 (선택사항)';
   }
@@ -2149,6 +2376,10 @@ async function handleAIUploadMulti(files){
   for(const file of Array.from(files)){
     await addAIImage(file);
   }
+  const i1=document.getElementById('aiImgInput');
+  const i2=document.getElementById('aiImgInput2');
+  if(i1)i1.value='';
+  if(i2)i2.value='';
 }
 
 function handleAIDrop(e){
