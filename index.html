@@ -1337,6 +1337,8 @@ function goDirectScheduleFromStep1(){
     insLabel:ins.name
   };
   setStep(3);
+  // 직접 입력 일정으로 바로 STEP 3에 진입할 때도 수업 시작일 입력칸과 일정 직접수정 UI를 반드시 렌더링합니다.
+  renderStartDateInputs();
   generateMessages();
   resetChecklist();
 }
@@ -2604,32 +2606,39 @@ async function runAIForCache(images, statusEl){
       contentArr.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.b64}});
     });
     const insNames=instructors.map(i=>i.name).join(', ');
-    const aliasSummary=getInstructorAliasSummary();
     const targetIds=getDirectInstructorIds();
     const targetNames=targetIds.length?instructors.filter(i=>targetIds.includes(i.id)).map(i=>i.name).join(', '):'미지정';
     const requestedSummary=Object.entries(getDayTimeMap()).map(([d,ts])=>d+'요일 '+(ts.length?ts.join(', '):'시간 미지정')).join(' / ')||'미지정';
     contentArr.push({type:'text',text:
-      '당신은 라이언멤버스 운영팀의 네이버 캘린더 주간표 OCR/판독 보조자입니다. 첨부된 캘린더 스크린샷 '+images.length+'장을 읽고, 강사별 기존 수업(busy)을 추출하세요. '+
-      '중요: 네이버 캘린더에서는 일정 제목이 학생명이고, 강사는 좌측 "내 캘린더" 색상 범례/캘린더명으로 구분됩니다. 같은 색상의 일정 블록은 해당 강사의 기존 수업입니다. '+
-      '강사 이름과 별칭: '+aliasSummary+'. 학생이 선택한 강사: '+targetNames+'. 학생 희망 시간: '+requestedSummary+'. '+
-      '스크린샷에 보이는 주간표의 요일 열과 시간 행을 기준으로, 색상 블록 하나하나를 busy로 읽으세요. 일정 제목의 학생명은 강사명이 아닙니다. '+
-      '특히 학생이 선택한 강사의 색상/캘린더명과 일치하는 일정은 모두 busy에 넣으세요. 다른 강사도 명확히 보이면 넣으세요. '+
-      'free는 사용하지 말고 항상 빈 배열로 두세요. 빈 시간 추정은 하지 마세요. '+
+      '당신은 라이언멤버스 운영팀의 캘린더 판독 보조자입니다. 첨부된 캘린더 스크린샷 '+images.length+'장을 읽고, 강사별 기존 수업(busy)을 추출하세요. free는 확실할 때만 보조적으로 넣고, 추측하지 마세요. '+
+      '강사 이름 목록: '+insNames+'. 학생이 선택한 강사: '+targetNames+'. 학생 희망 시간: '+requestedSummary+'. '+
+      '색상 범례나 캘린더 제목/일정명을 근거로 강사를 매칭하세요. 이름이 불확실하면 해당 일정을 넣지 마세요. '+
       '반드시 JSON 객체 하나만 출력하세요. 마크다운, 설명문, 코드펜스는 금지합니다. '+
-      '형식: {"calendar_has_events":true,"confidence":0.86,"instructors":[{"name":"David Park","busy":[{"day":"화","time":"14:00","date":"2026-06-23"}],"free":[]}]} '+
-      'calendar_has_events는 스크린샷에 일정 블록이 하나라도 보이면 true입니다. confidence는 전체 판독 신뢰도 0~1입니다. '+
+      '형식: {"instructors":[{"name":"Paul Oh","busy":[{"day":"화","time":"14:00","date":"2026-06-23"}],"free":[]}]} '+
       'day는 월/화/수/목/금/토/일 중 하나, time은 HH:MM 24시간 형식입니다. 날짜가 보이면 YYYY-MM-DD로 넣고, 보이지 않으면 date는 생략하세요. '+
-      '운영 규칙은 AI가 결정하지 않습니다. AI는 판독 가능한 기존 수업(busy) 원자료 추출에만 집중하세요.'
+      '운영 규칙은 AI가 결정하지 않습니다. AI는 판독 가능한 기존 수업(busy) 원자료 추출에 집중하세요. 추천 엔진이 이후 강사별 가능일정, 연강 최대 4시간, 기존 수업 전후 배치, 요일별 같은 시간 배치를 계산합니다.'
     });
 
-    let text='';
-    try{
-      // 정확도 우선: 스크린샷 OCR은 Sonnet을 먼저 사용하고, 모델/권한 문제 시 Haiku로 fallback
-      text=await callAnthropicCalendarOCR(key,contentArr,'claude-sonnet-4-5');
-    }catch(firstErr){
-      console.warn('Sonnet calendar OCR failed; falling back to Haiku:',firstErr);
-      text=await callAnthropicCalendarOCR(key,contentArr,'claude-haiku-4-5');
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'x-api-key':key,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      body:JSON.stringify({
+        model:'claude-haiku-4-5',
+        max_tokens:1200,
+        temperature:0,
+        messages:[{role:'user',content:contentArr}]
+      })
+    });
+    const data=await resp.json().catch(()=>({}));
+    if(!resp.ok||data.error){
+      throw new Error((data.error&&data.error.message)||('Anthropic API 오류: HTTP '+resp.status));
     }
+    const text=data.content?.filter(c=>c.type==='text').map(c=>c.text).join('\n')||'';
     const parsed=parseClaudeJSON(text);
 
     let busyCount=0;
