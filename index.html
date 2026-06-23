@@ -160,6 +160,8 @@ body.drag-selecting .time-chip{transition:none}
 .slot-group-body{padding:8px 10px 10px}
 .slot-group-body .slot-result:last-child{margin-bottom:0}
 .slot-category-desc{font-size:12px;color:var(--muted);padding:0 2px 8px;line-height:1.5}
+.slot-more-wrap{display:flex;justify-content:center;align-items:center;gap:10px;margin:14px 0 4px;flex-wrap:wrap}
+.slot-more-hint{font-size:12px;color:var(--muted)}
 
 </style>
 </head>
@@ -273,7 +275,10 @@ body.drag-selecting .time-chip{transition:none}
 
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <button class="btn btn-ghost" onclick="goNoSchedule()" style="font-size:12px">📝 일정 없이 메세지만 생성</button>
-      <button class="btn btn-primary" id="step1-next-btn" onclick="goNextFromStep1()">일정 추천 받기 →</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-accent" onclick="goDirectScheduleFromStep1()" style="font-size:12px">✍️ 입력한 일정으로 바로 생성</button>
+        <button class="btn btn-primary" id="step1-next-btn" onclick="goNextFromStep1()">일정 추천 받기 →</button>
+      </div>
     </div>
   </div>
 
@@ -1016,7 +1021,62 @@ function getInstructorPreferenceFit(slot,directIds){
 // ── SCHEDULING
 // slot item: { entries:[{instructor,day,time}], multiInstructor:bool, score, label }
 
-function computeSlots(){
+function getRankedTimesForDay(ins,day,requestedTimes,limit=5){
+  const times=getInstructorTimesForDay(ins,day).filter(t=>!isConflict(ins.id,day,t));
+  const req=(requestedTimes||[]).filter(Boolean);
+  const hour=t=>parseInt(String(t).split(':')[0],10);
+  return times.map(t=>{
+    let score=0;
+    if(req.includes(t))score+=100;
+    if(req.length){
+      const minDiff=req.reduce((m,r)=>Math.min(m,Math.abs(hour(t)-hour(r))),999);
+      if(minDiff===1)score+=35;
+      else if(minDiff===2)score+=14;
+      else if(minDiff>=4)score-=8;
+    }
+    const cache=icsCache[ins.id];
+    if(cache&&cache.slots&&cache.slots.length){
+      const dow=DAY_KO.indexOf(day);
+      const same=cache.slots.filter(s=>s.dow===dow);
+      if(same.length){
+        score+=8;
+        const minGap=same.reduce((m,s)=>Math.min(m,Math.abs(s.hour-hour(t))),999);
+        if(minGap===1)score+=25;
+        else if(minGap===2)score+=8;
+      }
+    }
+    return {time:t,score};
+  }).sort((a,b)=>b.score-a.score).slice(0,limit).map(x=>x.time);
+}
+function pushLimited(out,slot,limit){
+  if(out.length<limit)out.push(slot);
+}
+function buildSingleInsSchedulesLimited(ins,dayOptions,idx,current,out,limit){
+  if(out.length>=limit)return;
+  if(idx===dayOptions.length){
+    pushLimited(out,{entries:current.map(s=>({instructor:ins,day:s.day,time:s.time})),multiInstructor:false},limit);
+    return;
+  }
+  dayOptions[idx].cand.forEach(t=>{
+    if(out.length>=limit)return;
+    buildSingleInsSchedulesLimited(ins,dayOptions,idx+1,[...current,{day:dayOptions[idx].day,time:t}],out,limit);
+  });
+}
+function buildMultiSchedulesLimited(combo,daySlots,idx,current,out,limit){
+  if(out.length>=limit)return;
+  if(idx===combo.length){
+    const insIds=new Set(current.map(e=>e.instructor.id));
+    if(insIds.size>=2)pushLimited(out,{entries:[...current],multiInstructor:true},limit);
+    return;
+  }
+  const slots=daySlots[combo[idx]]||[];
+  for(const slot of slots){
+    if(out.length>=limit)break;
+    buildMultiSchedulesLimited(combo,daySlots,idx+1,[...current,slot],out,limit);
+  }
+}
+function computeSlots(batchLevel){
+  const cfg=getSlotBatchConfig(batchLevel||slotSearchLevel);
   const dayTimeMap=getDayTimeMap();
   const studentDays=Object.keys(dayTimeMap);
   const subjects=getChecked('s-subjects');
@@ -1024,62 +1084,57 @@ function computeSlots(){
   const directIds=Array.from(document.querySelectorAll('#s-instructor-direct input:checked')).map(i=>i.value);
 
   let cands=[...instructors];
-  if(subjects.length>0) cands=cands.filter(ins=>subjects.some(s=>ins.subjects.includes(s)));
+  if(subjects.length>0)cands=cands.filter(ins=>subjects.some(sub=>ins.subjects.includes(sub)));
+  // 선택 강사는 먼저 계산하되, 대체 강사 추천도 남긴다.
+  if(directIds.length)cands.sort((a,b)=>(directIds.includes(b.id)?1:0)-(directIds.includes(a.id)?1:0));
 
   let results=[];
+  const singleLimit=cfg.singleLimit;
+  const multiLimit=freq>=4?cfg.multiLimit:Math.max(cfg.multiLimit,24); // 단계별 확장: 주 4회 이상에서도 조금씩 추가
 
-  // ── 1. Single-instructor options
+  // ── 1. Single-instructor options — bounded Cartesian product
   cands.forEach(ins=>{
-    const availDays=ins.days;
-    if(availDays.length<freq)return;
-    getCombos(availDays,freq).forEach(combo=>{
+    if(results.length>singleLimit)return;
+    const baseDays=(studentDays.length>=freq?studentDays:ins.days).filter(d=>ins.days.includes(d));
+    if(baseDays.length<freq)return;
+    const dayCombos=getCombos(baseDays,freq).slice(0,cfg.comboLimit);
+    dayCombos.forEach(combo=>{
+      if(results.length>singleLimit)return;
       const dayOptions=combo.map(day=>{
-        // 학생이 특정 시간을 요청했더라도, 그 시간이 안 되면 같은 요일의 다른 시간도 대안으로 보여줘야 한다.
-        // 정확히 일치하는 시간은 아래 scoring/classification 단계에서 우선권을 받는다.
-        const cand=getInstructorTimesForDay(ins,day);
-        return{day,cand};
+        const requested=dayTimeMap[day]||[];
+        const cand=getRankedTimesForDay(ins,day,requested, requested.length?cfg.timeLimitRequested:cfg.timeLimitAny);
+        return {day,cand};
       });
       if(dayOptions.some(o=>o.cand.length===0))return;
-      buildSingleInsSchedules(ins,dayOptions,0,[],results);
+      buildSingleInsSchedulesLimited(ins,dayOptions,0,[],results,singleLimit);
     });
   });
 
-  // ── 2. Multi-instructor options
-  if(freq>=2 && cands.length>=2){
-    // Use all instructor days when student has no day preference
+  // ── 2. Multi-instructor options — aggressively bounded to avoid browser OOM
+  if(freq>=2&&cands.length>=2){
     const allCandDays=[...new Set(cands.flatMap(i=>i.days))];
-    const targetDays=allCandDays;
-
-    // Build per-day candidate slots: day -> [{instructor, day, time}]
+    const targetDays=(studentDays.length>=freq?studentDays:allCandDays);
     const daySlots={};
     targetDays.forEach(day=>{
-      daySlots[day]=[];
+      const requested=dayTimeMap[day]||[];
+      const tmp=[];
       cands.forEach(ins=>{
         if(!ins.days.includes(day))return;
-        // 2인 병행 후보도 학생 요청시간에만 고정하지 않고 같은 요일 내 시간 조정안을 허용한다.
-        const times=getInstructorTimesForDay(ins,day);
-        times.forEach(t=>{
-          if(!isConflict(ins.id,day,t)) daySlots[day].push({instructor:ins,day,time:t});
+        getRankedTimesForDay(ins,day,requested,Math.max(2,Math.min(4,cfg.timeLimitRequested))).forEach(t=>{
+          let score=0;
+          if(directIds.includes(ins.id))score+=60;
+          if(requested.includes(t))score+=80;
+          tmp.push({instructor:ins,day,time:t,_score:score});
         });
       });
+      daySlots[day]=tmp.sort((a,b)=>b._score-a._score).slice(0,cfg.multiDaySlotLimit);
     });
-
     const daysWithSlots=targetDays.filter(d=>daySlots[d]&&daySlots[d].length>0);
     if(daysWithSlots.length>=freq){
-      getCombos(daysWithSlots,freq).forEach(combo=>{
-        // Extract combo's daySlots for closure safety
-        const comboSlots=combo.map(d=>daySlots[d]);
-        const buildMulti=(idx,current)=>{
-          if(idx===combo.length){
-            const insIds=new Set(current.map(e=>e.instructor.id));
-            if(insIds.size<2)return; // single-ins already covered above
-            results.push({entries:[...current],multiInstructor:true});
-            return;
-          }
-          comboSlots[idx].forEach(slot=>buildMulti(idx+1,[...current,slot]));
-        };
-        buildMulti(0,[]);
-      });
+      const combos=getCombos(daysWithSlots,freq).slice(0,cfg.multiComboLimit);
+      const multi=[];
+      combos.forEach(combo=>buildMultiSchedulesLimited(combo,daySlots,0,[],multi,multiLimit));
+      results.push(...multi);
     }
   }
 
@@ -1087,7 +1142,7 @@ function computeSlots(){
   const seen=new Set();
   results=results.filter(r=>{
     const k=r.entries.map(e=>e.instructor.id+e.day+e.time).sort().join('|');
-    if(seen.has(k))return false; seen.add(k); return true;
+    if(seen.has(k))return false;seen.add(k);return true;
   });
 
   // 선택한 주당 횟수와 다른 후보가 섞이지 않도록 최종 방어 필터
@@ -1098,35 +1153,21 @@ function computeSlots(){
     const allSameTime=new Set(r.entries.map(e=>e.time)).size===1;
     const allSameIns=new Set(r.entries.map(e=>e.instructor.id)).size===1;
     let score=0;
-    if(allSameIns) score+=12;
-    if(allSameTime) score+=8; // 요일별 같은 시간으로 수업 배치 우선
-
+    if(allSameIns)score+=12;
+    if(allSameTime)score+=8;
     const prefFit=getInstructorPreferenceFit(r,directIds);
     const reqFit=getSlotRequestFit(r,dayTimeMap);
     const connFit=getConnectionFit(r);
-    score+=prefFit.score;
-    score+=reqFit.score;
-    score+=connFit.score;
-
+    score+=prefFit.score+reqFit.score+connFit.score;
     r.fit={preferred:prefFit,requested:reqFit,connection:connFit};
-
-    if(allSameIns){
-      r.insLabel=r.entries[0].instructor.name;
-    } else {
-      const parts=r.entries.map(e=>`${e.day}: ${e.instructor.name.split(' ')[0]}`);
-      r.insLabel=parts.join(' / ');
-    }
-
+    r.insLabel=allSameIns?r.entries[0].instructor.name:r.entries.map(e=>`${e.day}: ${e.instructor.name.split(' ')[0]}`).join(' / ');
     r.score=score;
     r.label=r.entries.map(e=>`${e.day}요일 ${fmtTime(e.time)}`).join(' / ');
   });
 
-  // maxConsec 초과 제거
   results=results.filter(r=>!(r.fit&&r.fit.connection&&r.fit.connection.maxRunExceeded));
-
-  // Split and cap separately so multi-instructor results always appear
-  const single=results.filter(r=>!r.multiInstructor).sort((a,b)=>b.score-a.score).slice(0,20);
-  const multi=results.filter(r=>r.multiInstructor).sort((a,b)=>b.score-a.score).slice(0,10);
+  const single=results.filter(r=>!r.multiInstructor).sort((a,b)=>b.score-a.score).slice(0,cfg.finalSingle);
+  const multi=results.filter(r=>r.multiInstructor).sort((a,b)=>b.score-a.score).slice(0,cfg.finalMulti);
   return [...single,...multi];
 }
 
@@ -1262,6 +1303,42 @@ function addManualSlot(){
   if(!ins)return;
   injectAISlot({day,time,instructorName:ins.name},true);
   document.getElementById('manual-time').value='';
+}
+
+function goDirectScheduleFromStep1(){
+  const name=document.getElementById('s-name').value.trim();
+  const phone=document.getElementById('s-phone').value.trim();
+  if(!name||!phone)return alert('학생 이름과 전화번호는 필수입니다.');
+  if(lessonType==='flex')return goNoSchedule();
+  const freq=getSelectedFrequency();
+  const dayTimeMap=getDayTimeMap();
+  const selectedDays=Object.keys(dayTimeMap);
+  if(selectedDays.length!==freq){
+    return alert(`주 ${freq}회 수업은 요일을 ${freq}개 선택해야 합니다. 현재 ${selectedDays.length}개 선택되었습니다.`);
+  }
+  const missing=selectedDays.filter(d=>!dayTimeMap[d]||dayTimeMap[d].length===0);
+  if(missing.length){
+    return alert('다음 요일의 시간을 선택하거나 직접입력으로 추가해주세요: '+missing.join(', '));
+  }
+  const directIds=Array.from(document.querySelectorAll('#s-instructor-direct input:checked')).map(i=>i.value);
+  const subjects=getChecked('s-subjects');
+  let ins=directIds.length?instructors.find(i=>i.id===directIds[0]):null;
+  if(!ins&&subjects.length)ins=instructors.find(i=>subjects.some(s=>i.subjects.includes(s)));
+  if(!ins)ins=instructors[0];
+  if(!ins)return alert('강사를 찾을 수 없습니다.');
+  const entries=selectedDays.map(day=>({instructor:ins,day,time:dayTimeMap[day][0]}));
+  selectedSlot={
+    entries,
+    multiInstructor:false,
+    score:999,
+    source:'manual_direct',
+    manualDirect:true,
+    label:entries.map(e=>`${e.day}요일 ${fmtTime(e.time)}`).join(' / '),
+    insLabel:ins.name
+  };
+  setStep(3);
+  generateMessages();
+  resetChecklist();
 }
 
 function goNextFromStep1(){
@@ -1583,6 +1660,12 @@ function renderSlotResults(slots){
     details.appendChild(body);
     el.appendChild(details);
   });
+  if(canLoadMoreSlots()){
+    const more=document.createElement('div');
+    more.className='slot-more-wrap';
+    more.innerHTML=`<button class="btn btn-ghost btn-sm" onclick="loadMoreSlots()">＋ 추천 조금 더 보기</button><span class="slot-more-hint">현재 ${slotSearchLevel}/${SLOT_BATCH_CONFIGS.length}단계 — 필요할 때만 다음 후보를 계산합니다</span>`;
+    el.appendChild(more);
+  }
   const firstResult=el.querySelector('.slot-result');
   if(firstResult)firstResult.click();
 }
@@ -2340,7 +2423,42 @@ let findMode='screenshot'; // 'screenshot' | 'calendar' | 'both'
 let pastedImages=[];  // mode: screenshot
 let pastedImages2=[]; // mode: both
 
+// 추천 결과를 한 번에 과도하게 만들지 않고 단계별로 확장하는 배치 설정
+let slotSearchLevel=1;
+const SLOT_BATCH_CONFIGS=[
+  {singleLimit:45,multiLimit:8,comboLimit:10,timeLimitRequested:3,timeLimitAny:2,multiDaySlotLimit:4,multiComboLimit:8,finalSingle:12,finalMulti:4},
+  {singleLimit:90,multiLimit:18,comboLimit:18,timeLimitRequested:4,timeLimitAny:3,multiDaySlotLimit:6,multiComboLimit:14,finalSingle:20,finalMulti:8},
+  {singleLimit:150,multiLimit:34,comboLimit:28,timeLimitRequested:5,timeLimitAny:4,multiDaySlotLimit:8,multiComboLimit:20,finalSingle:30,finalMulti:12},
+  {singleLimit:230,multiLimit:56,comboLimit:40,timeLimitRequested:6,timeLimitAny:5,multiDaySlotLimit:10,multiComboLimit:28,finalSingle:45,finalMulti:18}
+];
+function resetSlotBatchSearch(){slotSearchLevel=1;}
+function getSlotBatchConfig(level){
+  const idx=Math.max(0,Math.min((level||slotSearchLevel)-1,SLOT_BATCH_CONFIGS.length-1));
+  return SLOT_BATCH_CONFIGS[idx];
+}
+function canLoadMoreSlots(){return slotSearchLevel<SLOT_BATCH_CONFIGS.length;}
+function getCurrentFindSource(){return findMode==='calendar'?'calendar':(findMode==='both'?'both':'ai');}
+function loadMoreSlots(){
+  if(!canLoadMoreSlots())return;
+  slotSearchLevel++;
+  const el=document.getElementById('slotResults');
+  if(el){
+    const loading=document.createElement('div');
+    loading.className='empty';
+    loading.style.padding='16px';
+    loading.textContent='추천 후보를 조금 더 계산하는 중...';
+    el.appendChild(loading);
+  }
+  setTimeout(()=>{
+    const slots=computeSlots(slotSearchLevel);
+    const src=getCurrentFindSource();
+    slots.forEach(s=>{if(!s.source)s.source=src;});
+    renderSlotResults(slots);
+  },30);
+}
+
 function setFindMode(mode){
+  resetSlotBatchSearch();
   findMode=mode;
   ['screenshot','calendar','both'].forEach(m=>{
     document.getElementById('modeBtn-'+m).classList.toggle('active',m===mode);
@@ -2356,6 +2474,7 @@ function setFindMode(mode){
 
 // 📅 캘린더 자동 모드
 async function runCalendarFind(){
+  resetSlotBatchSearch();
   const statusEl=document.getElementById('step2-ics-status');
   statusEl.style.display='flex';
   statusEl.innerHTML='<div class="dot"></div><span>캘린더 읽는 중...</span>';
@@ -2376,6 +2495,7 @@ async function runCalendarFind(){
 
 // 🔀 둘 다 모드
 async function runBothFind(){
+  resetSlotBatchSearch();
   const statusEl=document.getElementById('step2-ics-status2');
   statusEl.style.display='flex';
   statusEl.innerHTML='<div class="dot"></div><span>캘린더 + 스크린샷 분석 중...</span>';
@@ -2401,12 +2521,13 @@ async function runBothFind(){
 
 // 📸 스크린샷 모드 — AI로 icsCache 채우고 추천
 async function runFindSlots(){
+  resetSlotBatchSearch();
   if(pastedImages.length===0){alert('스크린샷을 먼저 추가해주세요.');return;}
   const key=getAnthropicKey();
   if(!key){alert('설정 탭에서 Anthropic API Key를 먼저 입력해주세요.');return;}
   const label=document.getElementById('aiUploadLabel');
   label.textContent='⏳ AI 분석 중...';
-  document.getElementById('slotResults').innerHTML='<div class="empty">AI 분석 중...</div>';
+  document.getElementById('slotResults').innerHTML='<div class="empty">AI 분석 중...<br>이미지는 축소 처리되고, 추천 조합은 메모리 보호 모드로 계산됩니다.</div>';
 
   await runAIForCache(pastedImages, null);
   const computed=computeSlots();
@@ -2654,9 +2775,9 @@ async function addAIImage(file){
 async function prepareClaudeImage(file){
   // 캘린더 스크린샷 원본은 브라우저 메모리와 API payload를 크게 잡아먹으므로
   // 크기와 무관하게 항상 JPEG로 축소/압축해서 저장한다.
-  const blob=await resizeImageBlob(file,1280,0.72);
+  const blob=await resizeImageBlob(file,900,0.58);
   const b64=await fileToBase64(blob);
-  if(b64.length>4.5*1024*1024){
+  if(b64.length>2.2*1024*1024){
     throw new Error('이미지 압축 후에도 너무 큽니다. 캘린더 영역만 잘라서 다시 캡처해주세요.');
   }
   return {b64,mediaType:'image/jpeg',previewBlob:blob};
