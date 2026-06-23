@@ -586,7 +586,7 @@ function refreshInsSel(){
     const inp=document.createElement('input');
     inp.type='checkbox'; inp.value=ins.id;
     inp.style.display='none';
-    lbl.onclick=()=>{inp.checked=!inp.checked;lbl.classList.toggle('checked',inp.checked);if(cid==='modal-days')renderModalDayTimeRows();};
+    lbl.onclick=()=>{inp.checked=!inp.checked;lbl.classList.toggle('checked',inp.checked);};
     lbl.appendChild(inp); lbl.appendChild(document.createTextNode(ins.name));
     el.appendChild(lbl);
   });
@@ -2375,11 +2375,10 @@ async function runFindSlots(){
   label.textContent='⏳ AI 분석 중...';
   document.getElementById('slotResults').innerHTML='<div class="empty">AI 분석 중...</div>';
 
-  const aiResult=await runAIForCache(pastedImages, null);
+  await runAIForCache(pastedImages, null);
   const computed=computeSlots();
   computed.forEach(s=>{if(!s.source)s.source='ai';});
-  const directAI=buildAISuggestionsFromFreeGroups(aiResult.freeGroups||[]);
-  renderSlotResults([...directAI,...computed]);
+  renderSlotResults(computed);
 }
 
 // AI 분석 → icsCache 주입 공통 함수
@@ -2388,6 +2387,10 @@ async function runAIForCache(images, statusEl){
   const empty={freeGroups:[],busyCount:0,rawText:''};
   if(!key)return empty;
   try{
+    const totalB64=images.reduce((sum,img)=>sum+(img.b64?img.b64.length:0),0);
+    if(totalB64>9*1024*1024){
+      throw new Error('첨부 이미지 용량이 큽니다. 1~2장만 사용하거나 캘린더 영역만 잘라서 다시 캡처해주세요.');
+    }
     const contentArr=[];
     images.forEach(img=>{
       contentArr.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.b64}});
@@ -2416,7 +2419,7 @@ async function runAIForCache(images, statusEl){
       },
       body:JSON.stringify({
         model:'claude-haiku-4-5',
-        max_tokens:3000,
+        max_tokens:1200,
         temperature:0,
         messages:[{role:'user',content:contentArr}]
       })
@@ -2616,15 +2619,17 @@ async function addAIImage(file){
 }
 
 async function prepareClaudeImage(file){
-  const supported=['image/jpeg','image/png','image/gif','image/webp'];
-  if(supported.includes(file.type)&&file.size<7.5*1024*1024){
-    return {b64:await fileToBase64(file),mediaType:file.type,previewBlob:file};
+  // 캘린더 스크린샷 원본은 브라우저 메모리와 API payload를 크게 잡아먹으므로
+  // 크기와 무관하게 항상 JPEG로 축소/압축해서 저장한다.
+  const blob=await resizeImageBlob(file,1280,0.72);
+  const b64=await fileToBase64(blob);
+  if(b64.length>4.5*1024*1024){
+    throw new Error('이미지 압축 후에도 너무 큽니다. 캘린더 영역만 잘라서 다시 캡처해주세요.');
   }
-  const blob=await resizeImageBlob(file,1600,0.86);
-  return {b64:await fileToBase64(blob),mediaType:'image/jpeg',previewBlob:blob};
+  return {b64,mediaType:'image/jpeg',previewBlob:blob};
 }
 
-function resizeImageBlob(file,maxSide=1600,quality=.86){
+function resizeImageBlob(file,maxSide=1280,quality=.72){
   return new Promise((resolve,reject)=>{
     const img=new Image();
     const url=URL.createObjectURL(file);
@@ -2634,7 +2639,9 @@ function resizeImageBlob(file,maxSide=1600,quality=.86){
       const canvas=document.createElement('canvas');
       canvas.width=Math.max(1,Math.round(img.width*scale));
       canvas.height=Math.max(1,Math.round(img.height*scale));
-      const ctx=canvas.getContext('2d');
+      const ctx=canvas.getContext('2d',{alpha:false});
+      ctx.fillStyle='#ffffff';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
       ctx.drawImage(img,0,0,canvas.width,canvas.height);
       canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('이미지 압축 실패')),'image/jpeg',quality);
     };
