@@ -235,7 +235,9 @@ body.drag-selecting .time-chip{transition:none}
           <label>주당 수업 횟수</label>
           <select id="s-freq" onchange="onFreqChange()">
             <option value="1">주 1회</option><option value="2" selected>주 2회</option>
-            <option value="3">주 3회</option><option value="5">주 5회</option>
+            <option value="3">주 3회</option><option value="4">주 4회</option>
+            <option value="5">주 5회</option><option value="6">주 6회</option>
+            <option value="7">주 7회</option>
           </select>
         </div>
         <div class="form-group">
@@ -757,8 +759,6 @@ function renderDayTimeRows(){
 
 // 시간칩 선택 전용 엔진: 클릭 단일 선택/해제 + 드래그 선택/해제를 분리한다.
 function enableTimeChipSelection(chips){
-  if(!chips||chips.dataset.dragEnabled==='1')return;
-  chips.dataset.dragEnabled='1';
   let dragActive=false;
   let dragMode=null; // 'on' | 'off'
   let lastChip=null;
