@@ -601,6 +601,7 @@ function doLogin(){
     loadData();
     renderSubjectCBs('s-subjects',[]);
     renderDayCBs();
+    ensureFrequencyOptions();
     renderInsGrid();
     initRangeSelector();
     initAnthropicKeyDisplay();
@@ -808,7 +809,36 @@ function enableTimeChipSelection(chips){
   });
 }
 
-function onFreqChange(){renderDayTimeRows();}
+
+function getSelectedFrequency(){
+  const sel=document.getElementById('s-freq');
+  if(!sel)return 1;
+  const selectedText=sel.options&&sel.selectedIndex>=0?sel.options[sel.selectedIndex].textContent:'';
+  const textMatch=String(selectedText||'').match(/주\s*(\d+)\s*회/);
+  const byText=textMatch?parseInt(textMatch[1],10):NaN;
+  const byValue=parseInt(sel.value,10);
+  const freq=Number.isFinite(byText)?byText:(Number.isFinite(byValue)?byValue:1);
+  return Math.max(1,Math.min(7,freq));
+}
+function ensureFrequencyOptions(){
+  const sel=document.getElementById('s-freq');
+  if(!sel)return;
+  const current=getSelectedFrequency();
+  const wanted=[1,2,3,4,5,6,7];
+  const have=new Set(Array.from(sel.options).map(o=>String(o.value)));
+  let changed=false;
+  wanted.forEach(n=>{
+    if(!have.has(String(n))){
+      const opt=document.createElement('option');
+      opt.value=String(n); opt.textContent='주 '+n+'회';
+      sel.appendChild(opt); changed=true;
+    }
+  });
+  Array.from(sel.options).sort((a,b)=>parseInt(a.value)-parseInt(b.value)).forEach(o=>sel.appendChild(o));
+  sel.value=String(current);
+}
+
+function onFreqChange(){ensureFrequencyOptions();renderDayTimeRows();}
 
 // Returns {day: [times]} — empty array means any time OK
 function getDayTimeMap(){
@@ -990,7 +1020,7 @@ function computeSlots(){
   const dayTimeMap=getDayTimeMap();
   const studentDays=Object.keys(dayTimeMap);
   const subjects=getChecked('s-subjects');
-  const freq=parseInt(document.getElementById('s-freq').value);
+  const freq=getSelectedFrequency();
   const directIds=Array.from(document.querySelectorAll('#s-instructor-direct input:checked')).map(i=>i.value);
 
   let cands=[...instructors];
@@ -1059,6 +1089,9 @@ function computeSlots(){
     const k=r.entries.map(e=>e.instructor.id+e.day+e.time).sort().join('|');
     if(seen.has(k))return false; seen.add(k); return true;
   });
+
+  // 선택한 주당 횟수와 다른 후보가 섞이지 않도록 최종 방어 필터
+  results=results.filter(r=>r.entries&&r.entries.length===freq);
 
   // ── Score (선택강사 우선 + 희망조건 근접도 + 연강 최적화)
   results.forEach(r=>{
@@ -1517,7 +1550,7 @@ function renderSlotResults(slots){
     el.appendChild(warn);
   }
   const subjects=getChecked('s-subjects').join(', ');
-  const freq=document.getElementById('s-freq').value;
+  const freq=getSelectedFrequency();
 
   slots.forEach(slot=>{slot.category=classifySlot(slot);});
   slots.sort((a,b)=>{
@@ -1677,7 +1710,7 @@ function generateMessages(){
   if(!selectedSlot)return;
   const name=document.getElementById('s-name').value.trim();
   const phone=document.getElementById('s-phone').value.trim();
-  const freq=document.getElementById('s-freq').value;
+  const freq=getSelectedFrequency();
   const durDirect=document.getElementById('s-duration-direct');
   const dur=(durDirect&&durDirect.value.trim())?durDirect.value.trim():document.getElementById('s-duration').value;
   const detail=document.getElementById('s-detail').value.trim();
@@ -2524,7 +2557,7 @@ function matchInstructorByName(name){
 function buildAISuggestionsFromFreeGroups(freeGroups){
   const dayTimeMap=getDayTimeMap();
   const studentDays=Object.keys(dayTimeMap);
-  const freq=lessonType==='flex'?1:parseInt(document.getElementById('s-freq').value||'1');
+  const freq=lessonType==='flex'?1:getSelectedFrequency();
   const directIds=Array.from(document.querySelectorAll('#s-instructor-direct input:checked')).map(i=>i.value);
   const out=[];
 
@@ -2843,7 +2876,7 @@ function injectAISlot(s,add){
   if(add){
     if(container.querySelector('#'+eid))return;
     const div=document.createElement('div');div.className='slot-result';div.id=eid;
-    const freq=lessonType==='flex'?'비고정':document.getElementById('s-freq').value+'회';
+    const freq=lessonType==='flex'?'비고정':getSelectedFrequency()+'회';
     synSlot.source='ai';
     div.innerHTML='<div style="flex:1"><div class="si">🤖 '+synSlot.label+'</div><div class="sm" style="display:flex;align-items:center;gap:8px;margin-top:5px"><span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px">AI 추천</span><span style="font-size:11px;color:var(--muted)">'+freq+'</span></div></div><div style="font-size:12px;opacity:.5;margin-left:12px">선택 →</div>';
     div.onclick=()=>{document.querySelectorAll('.slot-result').forEach(r=>r.classList.remove('chosen'));div.classList.add('chosen');selectedSlot=synSlot;};
