@@ -2505,12 +2505,17 @@ async function runBothFind(){
   await prefetchAllICS();
 
   // 스크린샷도 있으면 AI 분석 후 icsCache 보강
+  let aiResult=null;
   if(pastedImages.length>0){
-    await runAIForCache(pastedImages, statusEl);
+    aiResult=await runAIForCache(pastedImages, statusEl);
   }
 
   const withUrls=instructors.filter(i=>i.calId).length;
   const withAI=pastedImages.length>0;
+  if(withUrls===0 && aiResult && !aiResult.reliable){
+    renderAITrustWarning('ICS 연동 없이 스크린샷 판독만 사용 중인데, AI가 기존 수업 busy를 안정적으로 추출하지 못했습니다. 자동추천을 중단했습니다.');
+    return;
+  }
   statusEl.style.background='#e8f5e9';statusEl.style.color='#2e7d32';
   statusEl.innerHTML='<div class="dot" style="background:var(--success)"></div><span>완료 — ICS '+withUrls+'명 + AI '+(withAI?pastedImages.length+'장':'없음')+'</span>';
 
@@ -2529,16 +2534,65 @@ async function runFindSlots(){
   label.textContent='⏳ AI 분석 중...';
   document.getElementById('slotResults').innerHTML='<div class="empty">AI 분석 중...<br>이미지는 축소 처리되고, 추천 조합은 메모리 보호 모드로 계산됩니다.</div>';
 
-  await runAIForCache(pastedImages, null);
+  const aiResult=await runAIForCache(pastedImages, null);
+  if(aiResult && !aiResult.reliable){
+    renderAITrustWarning('스크린샷에 일정이 있는 것으로 보이지만 기존 수업 busy를 충분히 읽지 못했습니다. 이 상태에서 자동추천을 진행하면 이미 있는 수업시간을 추천할 수 있어 중단했습니다.');
+    return;
+  }
   const computed=computeSlots();
   computed.forEach(s=>{if(!s.source)s.source='ai';});
   renderSlotResults(computed);
 }
 
+// 네이버 캘린더 색상/한글 캘린더명 매칭용 별칭
+function getInstructorAliases(ins){
+  const map={
+    matthew:['Matthew Moon','Matthew','매튜','문매튜','원장','매튜문'],
+    paul:['Paul Oh','Paul','폴','폴오'],
+    david:['David Park','David','데이빗','데이비드','데이빗 박','데이비드 박'],
+    jenna:['Jenna Kim','Jenna','제나','제니','제나김','제니김'],
+    campbell:['Campbell Soutter','Campbell','캠벨','캠벨 사우터'],
+    dean:['Dean Jeong','Dean','딘','딘정','정딘']
+  };
+  return map[ins.id]||[ins.name];
+}
+function getInstructorAliasSummary(){
+  return instructors.map(ins=>ins.name+' = '+getInstructorAliases(ins).join('/')).join('; ');
+}
+function renderAITrustWarning(message){
+  const slotEl=document.getElementById('slotResults');
+  if(slotEl){
+    slotEl.innerHTML='<div class="notice" style="margin:0 0 12px 0"><b>캘린더 판독 확인 필요</b><br>'+message+'</div>'+
+      '<div class="empty" style="padding:28px">스크린샷만으로 기존 수업을 안정적으로 판독하지 못했습니다.<br>캘린더 영역을 더 크게 잘라 다시 넣거나, 구글/아웃룩 ICS 연동 또는 수동 일정 입력을 사용해주세요.</div>';
+  }
+}
+async function callAnthropicCalendarOCR(key, contentArr, model){
+  const resp=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'x-api-key':key,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body:JSON.stringify({
+      model,
+      max_tokens:1800,
+      temperature:0,
+      messages:[{role:'user',content:contentArr}]
+    })
+  });
+  const data=await resp.json().catch(()=>({}));
+  if(!resp.ok||data.error){
+    throw new Error((data.error&&data.error.message)||('Anthropic API 오류: HTTP '+resp.status));
+  }
+  return data.content?.filter(c=>c.type==='text').map(c=>c.text).join('\n')||'';
+}
+
 // AI 분석 → icsCache 주입 공통 함수
 async function runAIForCache(images, statusEl){
   const key=getAnthropicKey();
-  const empty={freeGroups:[],busyCount:0,rawText:''};
+  const empty={freeGroups:[],busyCount:0,rawText:'',calendarHasEvents:null,confidence:null,reliable:false};
   if(!key)return empty;
   try{
     const totalB64=images.reduce((sum,img)=>sum+(img.b64?img.b64.length:0),0);
@@ -2550,39 +2604,32 @@ async function runAIForCache(images, statusEl){
       contentArr.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.b64}});
     });
     const insNames=instructors.map(i=>i.name).join(', ');
+    const aliasSummary=getInstructorAliasSummary();
     const targetIds=getDirectInstructorIds();
     const targetNames=targetIds.length?instructors.filter(i=>targetIds.includes(i.id)).map(i=>i.name).join(', '):'미지정';
     const requestedSummary=Object.entries(getDayTimeMap()).map(([d,ts])=>d+'요일 '+(ts.length?ts.join(', '):'시간 미지정')).join(' / ')||'미지정';
     contentArr.push({type:'text',text:
-      '당신은 라이언멤버스 운영팀의 캘린더 판독 보조자입니다. 첨부된 캘린더 스크린샷 '+images.length+'장을 읽고, 강사별 기존 수업(busy)을 추출하세요. free는 확실할 때만 보조적으로 넣고, 추측하지 마세요. '+
-      '강사 이름 목록: '+insNames+'. 학생이 선택한 강사: '+targetNames+'. 학생 희망 시간: '+requestedSummary+'. '+
-      '색상 범례나 캘린더 제목/일정명을 근거로 강사를 매칭하세요. 이름이 불확실하면 해당 일정을 넣지 마세요. '+
+      '당신은 라이언멤버스 운영팀의 네이버 캘린더 주간표 OCR/판독 보조자입니다. 첨부된 캘린더 스크린샷 '+images.length+'장을 읽고, 강사별 기존 수업(busy)을 추출하세요. '+
+      '중요: 네이버 캘린더에서는 일정 제목이 학생명이고, 강사는 좌측 "내 캘린더" 색상 범례/캘린더명으로 구분됩니다. 같은 색상의 일정 블록은 해당 강사의 기존 수업입니다. '+
+      '강사 이름과 별칭: '+aliasSummary+'. 학생이 선택한 강사: '+targetNames+'. 학생 희망 시간: '+requestedSummary+'. '+
+      '스크린샷에 보이는 주간표의 요일 열과 시간 행을 기준으로, 색상 블록 하나하나를 busy로 읽으세요. 일정 제목의 학생명은 강사명이 아닙니다. '+
+      '특히 학생이 선택한 강사의 색상/캘린더명과 일치하는 일정은 모두 busy에 넣으세요. 다른 강사도 명확히 보이면 넣으세요. '+
+      'free는 사용하지 말고 항상 빈 배열로 두세요. 빈 시간 추정은 하지 마세요. '+
       '반드시 JSON 객체 하나만 출력하세요. 마크다운, 설명문, 코드펜스는 금지합니다. '+
-      '형식: {"instructors":[{"name":"Paul Oh","busy":[{"day":"화","time":"14:00","date":"2026-06-23"}],"free":[]}]} '+
+      '형식: {"calendar_has_events":true,"confidence":0.86,"instructors":[{"name":"David Park","busy":[{"day":"화","time":"14:00","date":"2026-06-23"}],"free":[]}]} '+
+      'calendar_has_events는 스크린샷에 일정 블록이 하나라도 보이면 true입니다. confidence는 전체 판독 신뢰도 0~1입니다. '+
       'day는 월/화/수/목/금/토/일 중 하나, time은 HH:MM 24시간 형식입니다. 날짜가 보이면 YYYY-MM-DD로 넣고, 보이지 않으면 date는 생략하세요. '+
-      '운영 규칙은 AI가 결정하지 않습니다. AI는 판독 가능한 기존 수업(busy) 원자료 추출에 집중하세요. 추천 엔진이 이후 강사별 가능일정, 연강 최대 4시간, 기존 수업 전후 배치, 요일별 같은 시간 배치를 계산합니다.'
+      '운영 규칙은 AI가 결정하지 않습니다. AI는 판독 가능한 기존 수업(busy) 원자료 추출에만 집중하세요.'
     });
 
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'x-api-key':key,
-        'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-access':'true'
-      },
-      body:JSON.stringify({
-        model:'claude-haiku-4-5',
-        max_tokens:1200,
-        temperature:0,
-        messages:[{role:'user',content:contentArr}]
-      })
-    });
-    const data=await resp.json().catch(()=>({}));
-    if(!resp.ok||data.error){
-      throw new Error((data.error&&data.error.message)||('Anthropic API 오류: HTTP '+resp.status));
+    let text='';
+    try{
+      // 정확도 우선: 스크린샷 OCR은 Sonnet을 먼저 사용하고, 모델/권한 문제 시 Haiku로 fallback
+      text=await callAnthropicCalendarOCR(key,contentArr,'claude-sonnet-4-5');
+    }catch(firstErr){
+      console.warn('Sonnet calendar OCR failed; falling back to Haiku:',firstErr);
+      text=await callAnthropicCalendarOCR(key,contentArr,'claude-haiku-4-5');
     }
-    const text=data.content?.filter(c=>c.type==='text').map(c=>c.text).join('\n')||'';
     const parsed=parseClaudeJSON(text);
 
     let busyCount=0;
@@ -2620,14 +2667,17 @@ async function runAIForCache(images, statusEl){
     }
 
     const freeCount=freeGroups.reduce((sum,g)=>sum+g.slots.length,0);
-    const doneText='✅ 분석 완료 — 기존수업 '+busyCount+'개, 빈 후보 '+freeCount+'개 감지';
+    const calendarHasEvents=parsed.calendar_has_events===true;
+    const confidence=typeof parsed.confidence==='number'?parsed.confidence:null;
+    const reliable=(busyCount>0)||(!calendarHasEvents&&confidence!==null&&confidence>=0.7);
+    const doneText='✅ 분석 완료 — 기존수업 '+busyCount+'개, 빈 후보 '+freeCount+'개 감지'+(confidence!==null?' · 신뢰도 '+Math.round(confidence*100)+'%':'');
     const label=document.getElementById('aiUploadLabel');
     if(label)label.textContent=doneText;
     if(statusEl){
       statusEl.style.background='#e8f5e9';statusEl.style.color='#2e7d32';
       statusEl.innerHTML='<div class="dot" style="background:var(--success)"></div><span>'+doneText+'</span>';
     }
-    return {freeGroups,busyCount,rawText:text};
+    return {freeGroups,busyCount,rawText:text,calendarHasEvents,confidence,reliable};
   }catch(e){
     console.error(e);
     const msg='❌ AI 분석 실패: '+(e.message||'알 수 없는 오류');
@@ -2775,9 +2825,9 @@ async function addAIImage(file){
 async function prepareClaudeImage(file){
   // 캘린더 스크린샷 원본은 브라우저 메모리와 API payload를 크게 잡아먹으므로
   // 크기와 무관하게 항상 JPEG로 축소/압축해서 저장한다.
-  const blob=await resizeImageBlob(file,900,0.58);
+  const blob=await resizeImageBlob(file,1600,0.72);
   const b64=await fileToBase64(blob);
-  if(b64.length>2.2*1024*1024){
+  if(b64.length>4.8*1024*1024){
     throw new Error('이미지 압축 후에도 너무 큽니다. 캘린더 영역만 잘라서 다시 캡처해주세요.');
   }
   return {b64,mediaType:'image/jpeg',previewBlob:blob};
