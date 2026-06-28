@@ -146,6 +146,16 @@ header nav button.active,header nav button:hover{background:rgba(255,255,255,.15
 .range-select{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .range-btn{padding:5px 14px;border:1.5px solid #e0e0e0;border-radius:20px;font-size:12px;cursor:pointer;background:#fff;font-family:inherit;transition:all .15s}
 .range-btn.active{background:var(--border);color:#fff;border-color:var(--border)}
+.student-db-panel{border:1.5px solid #e0e0e0;border-radius:6px;padding:16px;background:#fafafa}
+.student-db-panel .student-db-warning{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:12px}
+.student-db-confirm{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--border);margin-bottom:12px;cursor:pointer;user-select:none}
+.student-db-confirm input{width:auto}
+.student-db-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.student-db-status{font-size:12px;line-height:1.6;color:var(--muted);min-height:22px}
+.student-db-status.success{color:var(--success)}
+.student-db-status.error{color:var(--danger)}
+.student-db-status.pending{color:var(--border)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
 body.drag-selecting{cursor:grabbing}
 body.drag-selecting .time-chip{transition:none}
 
@@ -219,6 +229,48 @@ body.drag-selecting .time-chip{transition:none}
       <div class="form-group">
         <label>수업 과목 * (복수 선택 가능)</label>
         <div class="check-group" id="s-subjects"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">학생DB 등록 정보</div>
+      <div class="form-row col3">
+        <div class="form-group">
+          <label>등록횟수 *</label>
+          <select id="s-package-count" onchange="updateStudentDbSaveButtonState()">
+            <option value="8" selected>8회</option>
+            <option value="16">16회</option>
+            <option value="24">24회</option>
+            <option value="32">32회</option>
+            <option value="48">48회</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>유입경로</label>
+          <select id="s-acquisition-source">
+            <option value="미정" selected>미정</option>
+            <option value="네이버">네이버</option>
+            <option value="블로그">블로그</option>
+            <option value="소개">소개</option>
+            <option value="광고">광고</option>
+            <option value="기타">기타</option>
+            <option value="테스트">테스트</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>상담일</label>
+          <input type="date" id="s-consultation-date">
+        </div>
+      </div>
+      <div class="form-row col2">
+        <div class="form-group">
+          <label>레벨테스트일</label>
+          <input type="date" id="s-level-test-date">
+        </div>
+        <div class="form-group">
+          <label>레벨테스트결과 상세</label>
+          <input type="text" id="s-level-test-result" placeholder="예: 비즈니스 회화, 사교영어 초중급">
+        </div>
       </div>
     </div>
 
@@ -426,6 +478,23 @@ body.drag-selecting .time-chip{transition:none}
       <div id="messagesOutput"></div>
     </div>
     <div class="card">
+      <div class="card-title">학생DB 저장</div>
+      <div class="student-db-panel">
+        <div class="student-db-warning">
+          실제 등록이 확정된 학생만 학생DB에 저장하세요.<br>
+          추천만 받은 가망고객은 저장하지 마세요.
+        </div>
+        <label class="student-db-confirm">
+          <input type="checkbox" id="student-db-confirmed" onchange="updateStudentDbSaveButtonState()">
+          <span>실제 등록 확정</span>
+        </label>
+        <div class="student-db-actions">
+          <button class="btn btn-primary" id="student-db-save-btn" onclick="saveStudentToDb()" disabled>학생DB 저장</button>
+          <div id="student-db-save-status" class="student-db-status">일정, 학생명, 첫 수업일, 등록횟수, 등록 확정 체크가 필요합니다.</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-title">출결규정 이미지 안내</div>
       <div class="hotkey-box">
         <div class="hk">야간팀 <span class="key">*</span></div>
@@ -557,8 +626,10 @@ const PW_DEFAULT='rm0707';
 const TIMES=['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00'];
 const DAYS=['월','화','수','목','금','토','일'];
 const SUBJECTS=['스몰톡(사교영어)','스몰톡 프로(TED)','여행영어','비지니스','영어면접','교수임용','토플','아이엘츠','오픽','토스','토익','키즈'];
+const STUDENT_DB_WEBAPP_URL='https://script.google.com/macros/s/AKfycbyoO91bJilg6H3NQ7XRKz48d317c6jcsF74MrHb9_gSu7LtgzRpLq11j0qhhKiijxWG8g/exec';
 
 let instructors=[], selectedSlot=null;
+let currentSourceSchedulerId='', currentSourceSchedulerSignature='', studentDbSaveInFlight=false;
 
 const DEFAULTS=[
 {id:'matthew',name:'Matthew Moon',days:['월','화','수','목','금'],times:['10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'],subjects:['스몰톡(사교영어)','스몰톡 프로(TED)','여행영어','비지니스','영어면접','교수임용'],maxConsec:4,calId:'',
@@ -610,6 +681,7 @@ function doLogin(){
     renderInsGrid();
     initRangeSelector();
     initAnthropicKeyDisplay();
+    initStudentDbFields();
   } else {
     document.getElementById('loginErr').style.display='block';
   }
@@ -1245,6 +1317,7 @@ function syncFlexSlot1Direct(){
   const direct=document.getElementById('flex-slot1-direct');
   if(sel&&direct&&sel.value)direct.value='';
   generateMessages();
+  updateStudentDbSaveButtonState();
 }
 function syncFlexSlot1Select(val){
   if(/^\d{2}:\d{2}$/.test(val)){const sel=document.getElementById('flex-slot1-select');if(sel)sel.value='';}
@@ -1254,6 +1327,7 @@ function syncFlexSlot2Direct(){
   const direct=document.getElementById('flex-slot2-direct');
   if(sel&&direct&&sel.value)direct.value='';
   generateMessages();
+  updateStudentDbSaveButtonState();
 }
 function syncFlexSlot2Select(val){
   if(/^\d{2}:\d{2}$/.test(val)){const sel=document.getElementById('flex-slot2-select');if(sel)sel.value='';}
@@ -1278,6 +1352,7 @@ function goNoSchedule(){
     generateMessages();
   }
   resetChecklist();
+  updateStudentDbSaveButtonState();
 }
 
 function toggleManualCard(){
@@ -1341,6 +1416,7 @@ function goDirectScheduleFromStep1(){
   renderStartDateInputs();
   generateMessages();
   resetChecklist();
+  updateStudentDbSaveButtonState();
 }
 
 function goNextFromStep1(){
@@ -1456,19 +1532,20 @@ function goStep3(){
     const defaultStart=getDefaultStartDateForEntries([e]);
     wrap.innerHTML=
       '<div class="form-row col2">'+
-      '<div class="form-group"><label>첫 수업 날짜 * <span style="font-size:11px;color:var(--muted);font-weight:400">오늘 제외 가장 가까운 선택요일 자동입력</span></label><input type="date" id="s-startdate-0" value="'+defaultStart+'" onchange="generateMessages()"></div>'+
+      '<div class="form-group"><label>첫 수업 날짜 * <span style="font-size:11px;color:var(--muted);font-weight:400">오늘 제외 가장 가까운 선택요일 자동입력</span></label><input type="date" id="s-startdate-0" value="'+defaultStart+'" onchange="generateMessages();updateStudentDbSaveButtonState()"></div>'+
       '<div class="form-group"><label>첫 수업 시각</label>'+
       '<div class="flex-time-wrap">'+
       '<select id="flex-slot1-select" onchange="syncFlexSlot1Direct()"><option value="">선택</option>'+
       ['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00'].map(t=>'<option value="'+t+'" '+( t===e.time?'selected':'' )+'>'+fmtTime(t)+'</option>').join('')+'</select>'+
       '<span class="sep">또는 직접</span>'+
-      '<input type="text" id="flex-slot1-direct" placeholder="예: 19:30" maxlength="5" value="'+( /^\d{2}:\d{2}$/.test(e.time)?e.time:'' )+'" oninput="syncFlexSlot1Select(this.value);generateMessages()">'+
+      '<input type="text" id="flex-slot1-direct" placeholder="예: 19:30" maxlength="5" value="'+( /^\d{2}:\d{2}$/.test(e.time)?e.time:'' )+'" oninput="syncFlexSlot1Select(this.value);generateMessages();updateStudentDbSaveButtonState()">'+
       '</div></div></div>';
   } else {
     renderStartDateInputs();
   }
   generateMessages();
   resetChecklist();
+  updateStudentDbSaveButtonState();
 }
 
 // ── SLOT RESULTS
@@ -1588,6 +1665,7 @@ function renderSlotCard(slot,subjects,freq){
     document.querySelectorAll('.slot-result').forEach(r=>r.classList.remove('chosen'));
     div.classList.add('chosen');
     selectedSlot=slot;
+    updateStudentDbSaveButtonState();
   };
   return div;
 }
@@ -1616,6 +1694,7 @@ function getAvailabilityWarnings(){
 function renderSlotResults(slots){
   slots=filterSlotsToTargetInstructors(slots||[]);
   const el=document.getElementById('slotResults'); selectedSlot=null;
+  updateStudentDbSaveButtonState();
   const warnings=getAvailabilityWarnings();
   if(slots.length===0){
     el.innerHTML=(warnings.length?'<div class="notice" style="margin-bottom:12px">⚠️ '+warnings.join('<br>⚠️ ')+'</div>':'')+'<div class="empty">조건에 맞는 일정이 없습니다.<br>강사 설정 또는 학생 조건을 확인해주세요.</div>';return;
@@ -1736,7 +1815,7 @@ function renderStartDateInputs(){
   const allSameIns=new Set(entries.map(e=>e.instructor.id)).size===1;
   const defaultStart=getDefaultStartDateForEntries(entries);
   if(allSameIns){
-    wrap.innerHTML='<div class="form-row col2"><div class="form-group"><label>수업 시작일 * <span style="font-size:11px;color:var(--muted);font-weight:400">오늘 제외 가장 가까운 선택요일 자동입력</span></label><input type="date" id="s-startdate-0" value="'+defaultStart+'" onchange="generateMessages()"></div></div>';
+    wrap.innerHTML='<div class="form-row col2"><div class="form-group"><label>수업 시작일 * <span style="font-size:11px;color:var(--muted);font-weight:400">오늘 제외 가장 가까운 선택요일 자동입력</span></label><input type="date" id="s-startdate-0" value="'+defaultStart+'" onchange="generateMessages();updateStudentDbSaveButtonState()"></div></div>';
   } else {
     const groups=getInsGroups(entries);
     let html='<div style="margin-bottom:10px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">강사별 수업 시작일</div>';
@@ -1745,7 +1824,7 @@ function renderStartDateInputs(){
       const groupDefaultStart=getDefaultStartDateForEntries(g.entries);
       html+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;padding:10px 14px;border:1.5px solid #e0e0e0;border-radius:4px;background:#fafafa">'
         +'<span style="min-width:170px;font-size:13px;font-weight:600">'+g.ins.name.split(' ')[0]+' <span style="font-weight:400;color:var(--muted)">('+gLabel+')</span></span>'
-        +'<input type="date" id="s-startdate-'+i+'" value="'+groupDefaultStart+'" onchange="generateMessages()" style="padding:7px 10px;border:1.5px solid #e0e0e0;border-radius:3px;font-size:13px;font-family:inherit">'
+        +'<input type="date" id="s-startdate-'+i+'" value="'+groupDefaultStart+'" onchange="generateMessages();updateStudentDbSaveButtonState()" style="padding:7px 10px;border:1.5px solid #e0e0e0;border-radius:3px;font-size:13px;font-family:inherit">'
         +'</div>';
     });
     wrap.innerHTML=html;
@@ -1760,6 +1839,7 @@ function onSchedEditChange(){
   });
   selectedSlot.label=selectedSlot.entries.map(e=>`${e.day}요일 ${fmtTime(e.time)}`).join(' / ');
   generateMessages();
+  updateStudentDbSaveButtonState();
 }
 
 function getStartDates(){
@@ -1775,6 +1855,188 @@ function getStartDates(){
     const el=document.getElementById('s-startdate-'+i);
     return el?el.value:'';
   });
+}
+
+// ── STUDENT DB SAVE
+function initStudentDbFields(){
+  const consultation=document.getElementById('s-consultation-date');
+  if(consultation&&!consultation.value)consultation.value=formatDateInputLocal(new Date());
+  ['s-name','s-package-count','student-db-confirmed'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    const eventName=el.type==='checkbox'||el.tagName==='SELECT'?'change':'input';
+    el.addEventListener(eventName,updateStudentDbSaveButtonState);
+  });
+  updateStudentDbSaveButtonState();
+}
+
+function getStudentDbInputValue_(id){
+  const el=document.getElementById(id);
+  return el?String(el.value||'').trim():'';
+}
+
+function getLessonDurationForStudentDb_(){
+  const direct=getStudentDbInputValue_('s-duration-direct');
+  const raw=direct||getStudentDbInputValue_('s-duration')||'1';
+  const parsed=parseFloat(raw);
+  return Number.isFinite(parsed)?parsed:raw;
+}
+
+function getSelectedFirstLessonDateForStudentDb(){
+  const startDates=typeof getStartDates==='function'?getStartDates():[];
+  return (startDates||[]).find(Boolean)||getStudentDbInputValue_('s-startdate-0');
+}
+
+function getConfirmedDayTimesForStudentDb(){
+  if(!selectedSlot||!selectedSlot.entries)return'';
+  const startDates=typeof getStartDates==='function'?getStartDates():[];
+  const allSameIns=new Set(selectedSlot.entries.map(e=>e.instructor.id)).size===1;
+  return selectedSlot.entries.map((e,i)=>{
+    const date=allSameIns?(startDates[0]||''):(startDates[i]||startDates[0]||'');
+    const time=lessonType==='flex'?(getFlexSlot1Time()||e.time):e.time;
+    const datePart=date?date+' ':'';
+    return datePart+e.day+'요일 '+fmtTime(time)+' / '+(e.instructor?e.instructor.name:'강사 미정');
+  }).join(' | ');
+}
+
+function getPreferredDayTimesForStudentDb(){
+  const dayTimeMap=getDayTimeMap();
+  const parts=Object.entries(dayTimeMap).map(([day,times])=>{
+    return day+'요일 '+(times&&times.length?times.map(fmtTime).join(', '):'시간 미정');
+  });
+  return parts.join(' | ');
+}
+
+function getSelectedInstructorsForStudentDb(){
+  if(selectedSlot&&selectedSlot.entries&&selectedSlot.entries.length){
+    return [...new Set(selectedSlot.entries.map(e=>e.instructor&&e.instructor.name).filter(Boolean))].join(', ');
+  }
+  const ids=Array.from(document.querySelectorAll('#s-instructor-direct input:checked')).map(i=>i.value);
+  return ids.map(id=>instructors.find(i=>i.id===id)).filter(Boolean).map(i=>i.name).join(', ');
+}
+
+function buildStudentDbSignature_(){
+  return [
+    getStudentDbInputValue_('s-name'),
+    getSelectedFirstLessonDateForStudentDb(),
+    getConfirmedDayTimesForStudentDb(),
+    getSelectedInstructorsForStudentDb(),
+    getStudentDbInputValue_('s-package-count')
+  ].join('|');
+}
+
+function makeSourceSchedulerId(){
+  const signature=buildStudentDbSignature_();
+  if(currentSourceSchedulerId&&currentSourceSchedulerSignature===signature)return currentSourceSchedulerId;
+  const now=new Date();
+  const pad=n=>String(n).padStart(2,'0');
+  const stamp=now.getFullYear()+pad(now.getMonth()+1)+pad(now.getDate())+'-'+pad(now.getHours())+pad(now.getMinutes())+pad(now.getSeconds());
+  const rand=Math.random().toString(36).replace(/[^a-z0-9]/g,'').slice(2,6).toUpperCase().padEnd(4,'X');
+  currentSourceSchedulerSignature=signature;
+  currentSourceSchedulerId='RMMATCH-'+stamp+'-'+rand;
+  return currentSourceSchedulerId;
+}
+
+function buildStudentDbPayload(){
+  const studentName=getStudentDbInputValue_('s-name');
+  const firstLessonDate=getSelectedFirstLessonDateForStudentDb();
+  const packageCount=parseInt(getStudentDbInputValue_('s-package-count'),10);
+  const confirmed=document.getElementById('student-db-confirmed');
+  if(!selectedSlot)throw new Error('확정 일정이 필요합니다.');
+  if(!studentName)throw new Error('학생명이 필요합니다.');
+  if(!firstLessonDate)throw new Error('첫 수업일이 필요합니다.');
+  if(!Number.isFinite(packageCount)||packageCount<=0)throw new Error('등록횟수가 필요합니다.');
+  if(!confirmed||!confirmed.checked)throw new Error('실제 등록 확정 체크가 필요합니다.');
+
+  const subjects=getChecked('s-subjects');
+  const detail=getStudentDbInputValue_('s-detail');
+  const levelTestResult=getStudentDbInputValue_('s-level-test-result');
+  const confirmedDayTimes=getConfirmedDayTimesForStudentDb();
+  const assignedInstructor=getSelectedInstructorsForStudentDb();
+  const learningGoal=levelTestResult||subjects.join(', ')||detail||'';
+  const summaryParts=[
+    studentName,
+    assignedInstructor?'강사: '+assignedInstructor:'',
+    firstLessonDate?'첫수업: '+firstLessonDate:'',
+    confirmedDayTimes?'확정일정: '+confirmedDayTimes:'',
+    '등록횟수: '+packageCount
+  ].filter(Boolean);
+
+  return {
+    action:'studentDb.create',
+    sourceSchedulerId:makeSourceSchedulerId(),
+    studentName,
+    phone:getStudentDbInputValue_('s-phone'),
+    acquisitionSource:getStudentDbInputValue_('s-acquisition-source')||'미정',
+    consultationDate:getStudentDbInputValue_('s-consultation-date'),
+    levelTestDate:getStudentDbInputValue_('s-level-test-date'),
+    levelTestResult,
+    learningGoal,
+    firstLessonDate,
+    assignedInstructor,
+    packageCount,
+    weeklyFrequency:lessonType==='flex'?1:getSelectedFrequency(),
+    lessonDuration:getLessonDurationForStudentDb_(),
+    preferredDayTimes:getPreferredDayTimesForStudentDb(),
+    confirmedDayTimes,
+    schedulerCreatedAt:new Date().toISOString(),
+    memo:detail,
+    rawSummary:summaryParts.join(' / ')
+  };
+}
+
+function setStudentDbSaveStatus(message,type){
+  const el=document.getElementById('student-db-save-status');
+  if(!el)return;
+  el.textContent=message||'';
+  el.className='student-db-status'+(type?' '+type:'');
+}
+
+function updateStudentDbSaveButtonState(){
+  const btn=document.getElementById('student-db-save-btn');
+  if(!btn)return;
+  const confirmed=document.getElementById('student-db-confirmed');
+  const ok=!!selectedSlot
+    &&!!getStudentDbInputValue_('s-name')
+    &&!!getSelectedFirstLessonDateForStudentDb()
+    &&!!getStudentDbInputValue_('s-package-count')
+    &&!!(confirmed&&confirmed.checked)
+    &&!studentDbSaveInFlight;
+  btn.disabled=!ok;
+  if(!ok&&!studentDbSaveInFlight){
+    setStudentDbSaveStatus('일정, 학생명, 첫 수업일, 등록횟수, 등록 확정 체크가 필요합니다.','');
+  }
+}
+
+async function saveStudentToDb(){
+  if(studentDbSaveInFlight)return;
+  let payload;
+  try{
+    payload=buildStudentDbPayload();
+  }catch(e){
+    setStudentDbSaveStatus(e.message||'저장 조건을 확인해주세요.','error');
+    updateStudentDbSaveButtonState();
+    return;
+  }
+  const btn=document.getElementById('student-db-save-btn');
+  studentDbSaveInFlight=true;
+  if(btn){btn.disabled=true;btn.textContent='전송 중...';}
+  setStudentDbSaveStatus('학생DB로 저장 요청을 보내는 중입니다...','pending');
+  try{
+    await fetch(STUDENT_DB_WEBAPP_URL,{
+      method:'POST',
+      mode:'no-cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify(payload)
+    });
+    setStudentDbSaveStatus('저장 요청을 보냈습니다. Google Sheet의 학생DB_저장로그에서 성공 여부를 확인하세요.','success');
+  }catch(_){
+    setStudentDbSaveStatus('저장 요청 중 브라우저 오류가 발생했습니다. 학생DB_저장로그를 확인하거나 다시 시도하세요.','error');
+  }finally{
+    studentDbSaveInFlight=false;
+    if(btn)btn.textContent='학생DB 저장';
+    updateStudentDbSaveButtonState();
+  }
 }
 
 function generateMessages(){
@@ -3059,7 +3321,7 @@ function injectAISlot(s,add){
     const freq=lessonType==='flex'?'비고정':getSelectedFrequency()+'회';
     synSlot.source='ai';
     div.innerHTML='<div style="flex:1"><div class="si">🤖 '+synSlot.label+'</div><div class="sm" style="display:flex;align-items:center;gap:8px;margin-top:5px"><span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px">AI 추천</span><span style="font-size:11px;color:var(--muted)">'+freq+'</span></div></div><div style="font-size:12px;opacity:.5;margin-left:12px">선택 →</div>';
-    div.onclick=()=>{document.querySelectorAll('.slot-result').forEach(r=>r.classList.remove('chosen'));div.classList.add('chosen');selectedSlot=synSlot;};
+    div.onclick=()=>{document.querySelectorAll('.slot-result').forEach(r=>r.classList.remove('chosen'));div.classList.add('chosen');selectedSlot=synSlot;updateStudentDbSaveButtonState();};
     container.insertBefore(div,container.firstChild);div.click();
   } else {
     const el=container.querySelector('#'+eid);if(el)el.remove();
