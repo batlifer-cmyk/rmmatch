@@ -93,10 +93,11 @@
   <div class="card">
     <div class="card-title">&lt;분석&gt;</div>
     <div class="grid2">
-      <div class="field"><label>빠른 문장구성과 발화</label><select id="fluency_rating" data-field><option value="">미평가</option><option>매우 느림</option><option>느림</option><option>보통</option><option>좋음</option><option>매우 좋음</option></select><input id="fluency_notes" data-field placeholder="추가 설명" style="margin-top:7px"></div>
+      <div class="field"><label>빠른 문장구성과 발화 (말거리 정리 및 발속도)</label><select id="fluency_rating" data-field><option value="">미평가</option><option>매우 느림</option><option>느림</option><option>보통</option><option>좋음</option><option>매우 좋음</option></select><input id="fluency_notes" data-field placeholder="추가 설명" style="margin-top:7px"></div>
       <div class="field"><label>문법적 정확도</label><select id="grammar_rating" data-field><option value="">미평가</option><option>기초부터 필요</option><option>불안정</option><option>보통</option><option>안정</option><option>매우 안정</option></select><input id="grammar_notes" data-field placeholder="추가 설명" style="margin-top:7px"></div>
-      <div class="field"><label>어순</label><select id="word_order_rating" data-field><option value="">미평가</option><option>단어 배열 중심</option><option>2형식 이하 안정</option><option>3형식 이하 안정</option><option>4·5형식 보완 필요</option><option>확장문장 가능</option><option>고급문장 가능</option></select><input id="word_order_notes" data-field placeholder="추가 설명" style="margin-top:7px"></div>
-      <div class="field"><label>문장확장</label><select id="expansion_rating" data-field><option value="">미평가</option><option>단답형</option><option>1~2문장</option><option>3~4문장</option><option>Message House 보완 필요</option><option>관계대명사 사용 가능</option><option>분사구문 사용 가능</option><option>논리적 문단 구성 가능</option></select><input id="expansion_notes" data-field placeholder="추가 설명" style="margin-top:7px"></div>
+      <div class="field"><label>어순</label><select id="word_order_rating" data-field><option value="">미평가</option><option>때로는 어순에 맞지 않는 단어나열</option><option>2형식 이하 안정</option><option>3형식 이하 안정</option><option>4,5형식 가능</option><option>확장문장 가능</option></select><input id="word_order_notes" data-field placeholder="추가 설명" style="margin-top:7px"></div>
+      <div class="field"><label>문장확장</label><select id="expansion_rating" data-field><option value="">미평가</option><option>관계대명사 사용가능</option><option>분사구문 사용가능</option></select><input id="expansion_notes" data-field placeholder="추가 설명" style="margin-top:7px"></div>
+      <div class="field"><label>문단구성</label><select id="paragraph_rating" data-field><option value="">미평가</option><option>문단화 부족</option><option>AAA구조 3문장 가능</option><option>에피소딕 메세지하우스(육하원칙) 일부 가능</option><option>에피소딕 메세지하우스 완벽</option><option>논리적 메세지하우스(주장-이유/근거-예시-마무리) 일부 가능</option><option>논리적 메세지하우스 완벽</option><option>프리젠테이션 진행은 미흡</option><option>프리젠테이션 완벽</option></select><input id="paragraph_notes" data-field placeholder="추가 설명" style="margin-top:7px"></div>
       <div class="field"><label>기초어휘</label><select id="vocab_analysis_rating" data-field><option value="">미평가</option><option>부족</option><option>기초</option><option>보통</option><option>양호</option><option>우수</option></select><input id="vocab_analysis_notes" data-field placeholder="추가 설명" style="margin-top:7px"></div>
     </div>
   </div>
@@ -148,7 +149,6 @@
 </aside>
 </main>
 
-<script src="app.js"></script>
-<script src="method-tags.js?v=0.5.2"></script>
+<script src="app.js?v=0.5.3"></script>
 </body>
 </html>
