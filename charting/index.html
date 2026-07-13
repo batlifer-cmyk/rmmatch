@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RM 상담차팅</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="login">
+  <div class="login-card">
+    <h1>RM 상담차팅</h1>
+    <p>상담기록용 비밀번호를 입력하세요. 비밀번호는 이 브라우저에만 저장됩니다.</p>
+    <input id="loginPassword" type="password" placeholder="상담차팅 비밀번호" autocomplete="current-password">
+    <button id="loginBtn">접속</button>
+    <div id="loginError" class="login-error"></div>
+  </div>
+</div>
+
+<header>
+  <div><h1>RM 상담차팅</h1><div class="sub">선택식 + 직접기록 + 맞춤법 교정 + 시트·잔디 동시 전송</div></div>
+  <div class="header-actions">
+    <span id="saveState" class="sub">임시저장 대기</span>
+    <button id="clearBtn">새 기록</button>
+    <button id="logoutBtn">로그아웃</button>
+  </div>
+</header>
+
+<main>
+<section id="formPane">
+  <div class="card">
+    <div class="card-title">기본정보</div>
+    <div class="card-desc">명시되지 않은 나이·성별·거주지는 추정하지 않고 비워둡니다.</div>
+    <div class="grid3">
+      <div class="field"><label>학생명 *</label><input id="student_name" data-field placeholder="예: 김은비"></div>
+      <div class="field"><label>상담일 *</label><input id="consultation_date" data-field type="date"></div>
+      <div class="field"><label>기록 구분</label>
+        <select id="chart_type" data-field><option>신규</option><option>재등록</option><option>재상담</option><option>기타</option></select>
+      </div>
+    </div>
+    <div class="grid3">
+      <div class="field"><label>나이대</label>
+        <select id="age_group" data-field><option value="">미기재</option><option>10대</option><option>20대</option><option>30대</option><option>40대</option><option>50대</option><option>60대 이상</option><option>50~60대</option></select>
+      </div>
+      <div class="field"><label>나이 원문</label><input id="age_raw" data-field placeholder="예: 40대 후반"></div>
+      <div class="field"><label>성별</label>
+        <select id="gender" data-field><option value="">미기재</option><option>여성</option><option>남성</option><option>기타</option></select>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>거주지역 표준</label>
+        <select id="residence_standard" data-field><option value="">미기재</option><option>마린시티</option><option>해운대</option><option>센텀</option><option>중동</option><option>좌동</option><option>용호동</option><option>기장</option><option>부산 기타</option><option>서울</option><option>기타</option></select>
+      </div>
+      <div class="field"><label>거주지 원문</label><input id="residence_raw" data-field placeholder="예: 마린시티 거주"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">&lt;profile&gt;</div>
+    <div class="field"><label>1. 대화성향/특징 — 빠른 선택</label><div id="conversation_tags" class="chips" data-chips></div></div>
+    <div class="field"><label>대화성향/특징 — 직접 기록</label><textarea id="conversation_notes" data-field placeholder="상담 당시의 인상, 반응, 설득·수업 시 참고할 특징을 기록하세요."></textarea></div>
+    <div class="grid3">
+      <div class="field"><label>2. 직업군</label><select id="occupation_group" data-field><option value="">미기재</option><option>의료</option><option>교육</option><option>회사원</option><option>공기업</option><option>자영업</option><option>전문직</option><option>대학생·대학원생</option><option>군인</option><option>주부</option><option>서비스업</option><option>예술·디자인</option><option>기타</option></select></div>
+      <div class="field"><label>구체적 직업 *</label><input id="occupation_raw" data-field placeholder="예: 해운대백병원 응급실 간호사"></div>
+      <div class="field"><label>기관·회사명</label><input id="organization" data-field placeholder="예: 해운대백병원"></div>
+    </div>
+    <div class="field"><label>3. 과거학습이력 — 빠른 선택</label><div id="past_learning_tags" class="chips" data-chips></div></div>
+    <div class="field"><label>과거학습이력 — 추가 내용</label><textarea id="past_learning_notes" data-field></textarea></div>
+    <div class="grid2">
+      <div class="field"><label>4. 어학연수/유학경험</label><select id="study_abroad_type" data-field><option value="">미기재</option><option>없음</option><option>단기 어학연수</option><option>교환학생</option><option>해외 대학·대학원</option><option>해외 근무</option><option>해외 거주</option><option>기타</option></select></div>
+      <div class="field"><label>국가·기간 등 추가 내용</label><input id="study_abroad_notes" data-field></div>
+    </div>
+    <div class="field"><label>5. 해외여행경험</label><select id="travel_frequency" data-field><option value="">미기재</option><option>없음</option><option>드물게</option><option>연 1회</option><option>연 2~3회</option><option>자주</option><option>장기체류 경험</option></select></div>
+    <div class="field"><label>6. 개인적 학습목표 — 빠른 선택</label><div id="goal_tags" class="chips" data-chips></div></div>
+    <div class="field"><label>개인적 학습목표 — 구체적인 사정과 목표</label><textarea id="goal_notes" data-field placeholder="학생의 실제 동기, 업무·여행·가족 상황 등을 기록하세요."></textarea></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">&lt;레벨테스트 결과&gt;</div>
+    <div class="grid2">
+      <div class="field"><label>1. phonics 파닉스</label><select id="phonics_rating" data-field><option value="">미측정</option><option>정상</option><option>부분 보완 필요</option><option>기초부터 필요</option></select><input id="phonics_notes" data-field placeholder="추가 메모" style="margin-top:7px"></div>
+      <div class="field"><label>2. syllables 음소발음</label><select id="pronunciation_rating" data-field><option value="">미측정</option><option>우수</option><option>양호</option><option>보통</option><option>교정 필요</option><option>집중 교정 필요</option></select><input id="pronunciation_notes" data-field placeholder="stress, intonation, ending sound 등" style="margin-top:7px"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>3. vocab 평가</label><select id="vocab_rating" data-field><option value="">미측정</option><option>부족</option><option>기초</option><option>보통</option><option>양호</option><option>우수</option></select></div>
+      <div class="field"><label>확인한 단어 <span class="protected">교정 보호</span></label><input id="vocab_words" data-field placeholder="press, stay, transfer..."></div>
+    </div>
+    <div class="field"><label>4. 테스트 문항</label><input id="test_prompt" data-field placeholder="예: 가족이 슈퍼마켓에서 쇼핑하는 장면"></div>
+    <div class="field"><label>학생 실제 영어 응답 <span class="protected">원문 그대로 보호</span></label><textarea id="student_response" data-field placeholder="He look at little boy..."></textarea><small>맞춤법 교정 시 이 응답은 자동으로 가림 처리한 뒤 원문 그대로 복구됩니다.</small></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">&lt;분석&gt;</div>
+    <div class="grid2">
+      <div class="field"><label>빠른 문장구성과 발화</label><select id="fluency_rating" data-field><option value="">미평가</option><option>매우 느림</option><option>느림</option><option>보통</option><option>좋음</option><option>매우 좋음</option></select><input id="fluency_notes" data-field placeholder="추가 설명" style="margin-top:7px"></div>
+      <div class="field"><label>문법적 정확도</label><select id="grammar_rating" data-field><option value="">미평가</option><option>기초부터 필요</option><option>불안정</option><option>보통</option><option>안정</option><option>매우 안정</option></select><input id="grammar_notes" data-field placeholder="추가 설명" style="margin-top:7px"></div>
+      <div class="field"><label>어순</label><select id="word_order_rating" data-field><option value="">미평가</option><option>단어 배열 중심</option><option>2형식 이하 안정</option><option>3형식 이하 안정</option><option>4·5형식 보완 필요</option><option>확장문장 가능</option><option>고급문장 가능</option></select><input id="word_order_notes" data-field placeholder="추가 설명" style="margin-top:7px"></div>
+      <div class="field"><label>문장확장</label><select id="expansion_rating" data-field><option value="">미평가</option><option>단답형</option><option>1~2문장</option><option>3~4문장</option><option>Message House 보완 필요</option><option>관계대명사 사용 가능</option><option>분사구문 사용 가능</option><option>논리적 문단 구성 가능</option></select><input id="expansion_notes" data-field placeholder="추가 설명" style="margin-top:7px"></div>
+      <div class="field"><label>기초어휘</label><select id="vocab_analysis_rating" data-field><option value="">미평가</option><option>부족</option><option>기초</option><option>보통</option><option>양호</option><option>우수</option></select><input id="vocab_analysis_notes" data-field placeholder="추가 설명" style="margin-top:7px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">&lt;수업전략&gt;</div>
+    <div class="field"><label>권장 수업·과목 태그</label><div id="class_tags" class="chips" data-chips></div></div>
+    <div class="field"><label>지도 방식 태그</label><div id="method_tags" class="chips" data-chips></div></div>
+    <div class="grid2">
+      <div class="field"><label>수업전략 1</label><textarea id="strategy_1" data-field></textarea></div>
+      <div class="field"><label>수업전략 2</label><textarea id="strategy_2" data-field></textarea></div>
+      <div class="field"><label>수업전략 3</label><textarea id="strategy_3" data-field></textarea></div>
+      <div class="field"><label>수업전략 4</label><textarea id="strategy_4" data-field></textarea></div>
+      <div class="field"><label>수업전략 5</label><textarea id="strategy_5" data-field></textarea></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">&lt;레벨&gt;</div>
+    <div class="card-desc">공식 레벨은 매튜가 선택한 값만 저장합니다. 시스템이 임의로 판단하지 않습니다.</div>
+    <div id="levelPills" class="level-pills"></div>
+    <div id="templateList" class="template-list"></div>
+    <div class="field" style="margin-top:13px"><label>레벨 특이사항</label><textarea id="level_special_notes" data-field></textarea></div>
+    <div class="field"><label>최종 레벨지침 <span class="protected">교정 보호</span></label><textarea id="level_final_text" data-field style="min-height:150px"></textarea></div>
+  </div>
+</section>
+
+<aside class="preview-pane">
+  <div class="preview-card">
+    <div class="preview-head"><h2>최종 기록 미리보기</h2><span id="previewStatus" class="status-badge">작성 중</span></div>
+    <div class="tabs">
+      <button class="tab on" data-tab="original">작성 원문</button>
+      <button class="tab" data-tab="corrected">맞춤법 교정본</button>
+      <button class="tab" data-tab="diff">변경 비교</button>
+    </div>
+    <div class="preview-body">
+      <textarea id="originalPreview" class="preview-area" readonly></textarea>
+      <textarea id="correctedPreview" class="preview-area hidden" placeholder="맞춤법 교정본 생성 후 매튜가 직접 최종 수정할 수 있습니다."></textarea>
+      <div id="diffPreview" class="diff-box hidden"></div>
+    </div>
+    <div class="actions">
+      <button id="proofreadBtn" class="btn btn-accent">맞춤법 교정본 생성</button>
+      <button id="resetProofreadBtn" class="btn btn-ghost">교정본 초기화</button>
+      <button id="submitBtn" class="btn btn-primary full">구글시트 저장 + 잔디 전송</button>
+      <button id="retryBtn" class="btn btn-danger full hidden">잔디에만 다시 전송</button>
+    </div>
+    <div id="notice" class="notice">학생 영어 응답과 레벨지침은 맞춤법 교정에서 원문 그대로 보호됩니다.</div>
+  </div>
+</aside>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
