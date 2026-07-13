@@ -1,12 +1,12 @@
 const BACKEND_URL='https://script.google.com/macros/s/AKfycbx-5XshUD_hLa4nMh7vJR2iom_yYUiTalz4mxmAh5npEmtmOZ-Sq9gg906xqy6ovp75nQ/exec';
-const FORM_VERSION='0.5.1-MVP';
+const FORM_VERSION='0.5.3-MVP';
 const LEVEL_TEMPLATES={"LV1_BASE": {"level": "LV1", "label": "LV1 기본 — Word Order", "text": "lv1\nword order(필요시 한국어로 어순훈련시켜주세요. 교재 앞쪽에 있음), small talk paragraph, message house (앞에서부터 우선순위로 교육해주세요. 문법설명보다는 스몰톡 답변을 만들어내고 월간테스트에 대비하는 것이 가장 중요합니다^^)"}, "LV2_BASE": {"level": "LV2", "label": "LV2 기본", "text": "lv2\nsmall talk paragraph, message house, verb tense (앞에서부터 우선순위로 교육해주세요. 문법설명보다는 스몰톡 답변을 만들어내고 월간테스트에 대비하는 것이 가장 중요합니다^^)"}, "LV2_COMPLETE_SENTENCE": {"level": "LV2", "label": "LV2 Complete Sentences 보완", "text": "lv2\n종종 올바른 어순의 complete sentences 표준문장을 교육해주세요. + small talk paragraph, message house, verb tense (앞에서부터 우선순위로 교육해주세요. 문법설명보다는 스몰톡 답변을 만들어내고 월간테스트에 대비하는 것이 가장 중요합니다^^)"}, "LV2_COMPLEX_SENTENCE": {"level": "LV2", "label": "LV2 4·5형식·관계대명사 확장", "text": "lv2\n(4,5형식의 긴 문장 & 관계대명사를 사용한 확장문장을 시도하도록 독려 encouraging to challenge 해주세요. 예를 들어, I went swimming. Swimming is my favorite. => I went swimming, which is my favorite.으로) small talk paragraph, message house, verb tense (앞에서부터 우선순위로 교육해주세요. 문법설명보다는 스몰톡 답변을 만들어내고 월간테스트에 대비하는 것이 가장 중요합니다^^)"}, "LV2_INTERVIEW_FIRST": {"level": "LV2", "label": "LV2 영어면접 우선", "text": "lv2\n영어면접준비 + small talk paragraph, message house, verb tense (앞에서부터 우선순위로 교육해주세요. 문법설명보다는 스몰톡 답변을 만들어내고 월간테스트에 대비하는 것이 가장 중요합니다^^)"}, "LV2_INTERVIEW_AFTER_CORE": {"level": "LV2", "label": "LV2 기본수업 후 영어면접", "text": "lv2\nsmall talk paragraph, message house, verb tense + 영어면접준비 (앞에서부터 우선순위로 교육해주세요. 문법설명보다는 스몰톡 답변을 만들어내고 월간테스트에 대비하는 것이 가장 중요합니다^^)"}, "LV3_ACCURACY_SOUND": {"level": "LV3", "label": "LV3 정확도·소리교육·토론", "text": "lv3\n높은 수준이지만 small talk paragraph에서 오류들을 모두 찾아내주는 것 + 소리교육(발음 & 듣기)이 중요합니다. 영어토론교재를 병행해도 좋습니다. 1-2회의 스몰톡 수업 후 또는 선생님이 직접 겪어보고 바로 주1회는 토론수업을 하는 등의 조정을 하셔도 좋습니다. verb tense, formal verb phrase & words"}, "LV3_INTERVIEW_DISCUSSION": {"level": "LV3", "label": "LV3 인터뷰·전공설명·토론", "text": "lv3\n스몰톡 스피킹은 매우 좋으나 전공 설명하기 등 영어면접에 준비된 수준은 아니므로 영어면접을 하거나, 학생 개인에 대해 마치 할리우드 스타 인터뷰를 하듯 상세한 답변을 준비하는 것으로 스몰톡을 학습하게 해주세요. 빠르게 토론교재로 넘어가주세요. 토론교재에서도, 개인과제에서도 별점을 계속 매겨 피드백을 주세요."}};
 const CHIP_OPTIONS={
  conversation_tags:['말수가 적음','미소·리액션 좋음','적극적','집중력 좋음','빠른 대화 속도','유머·농담 선호','신뢰 형성에 시간 필요','차분함','정중함','표정 변화 적음','질문이 많음','실수에 민감함','자신감 낮음','설명을 많이 원함','직접 참여 시 만족도 높음'],
  past_learning_tags:['학교 문법교육','독해 중심','시험영어','그룹회화','원어민 1:1','온라인 수업','독학','영어유치원','해외 거주','장기간 공백','별도 학습경험 없음'],
  goal_tags:['자기계발','해외여행','일상회화','업무영어','외국인 고객 응대','해외출장','해외취업','유학','이민','자녀교육','발음교정','영어면접','OPIc','IELTS','TOEFL','프레젠테이션','아카데믹 토론'],
- class_tags:['Small Talk','Message House','Word Order','Verb Tense','Pronunciation','Listening','TED','VOA','Discussion','Debating','Business English','Medical English','Travel English','OPIc','IELTS','English Interview','Academic Writing'],
- method_tags:['한국어 단계별 힌트','즉시 교정','말을 끝까지 기다리기','정답보다 질문으로 유도','육하원칙 확장','따라 말하기','낭독훈련','발음 반복','문장 업그레이드','문단형 답변','월간테스트 중심','과제 중심']
+ class_tags:['Small Talk','Message House','Word Order','Verb Tense','Pronunciation','Listening','TED','VOA','Discussion','Debating','Business English','Medical English','Travel English','OPIc','IELTS','English Interview','Academic Writing','TOEFL','토익스피킹','토익','맞춤형 시험준비','교수임용','키즈 스몰톡','키즈 토론','주니어 토플','유학준비'],
+ method_tags:['한국어로 힌트를 주는 설명하며 영어단어로 말하게 유도','틀린 것 즉시 교정','끝까지 들어주며 기다려드리는 것 선호','정답 잘 알려주지 않고 힌트로 유도해서 맞추는 즐거움','선생님 말 따라 말하기(modeling)','낭독훈련','틀린 발음 집중교정','단어로만 말하는 것들 완성형 문장으로','한 문장이 아닌 문단으로 답변','편한 수업분위기지만 철저한 월간테스트와 피드백 중심','혼자 집중할 수 있는 과제 선호','단순시제 습관을 완료형 사용으로 확장','4,5형식 사용유도','관계대명사 that, which, who 사용유도','분사구문 -ing(하면서), -ed(되어서) 사용유도','어순만 집중훈련(누가, 한다, 무엇을, 어디서, 언제)','AAA구조(3문장 Answer, Add, Ask)','에피소딕 메세지하우스(육하원칙)','논리적 메세지하우스(주장-이유-근거/예시-마무리)']
 };
 let password='', selectedLevel='', selectedTemplate='', correctedDirty=false, proofreadSourceText='', proofreadStale=false, submitCompleted=false, lastRecordId='', autosaveTimer=null;
 
@@ -63,6 +63,7 @@ function buildRecord(){
    grammar_rating:val('grammar_rating'), grammar_notes:val('grammar_notes'),
    word_order_rating:val('word_order_rating'), word_order_notes:val('word_order_notes'),
    expansion_rating:val('expansion_rating'), expansion_notes:val('expansion_notes'),
+   paragraph_rating:val('paragraph_rating'), paragraph_notes:val('paragraph_notes'),
    vocab_analysis_rating:val('vocab_analysis_rating'), vocab_analysis_notes:val('vocab_analysis_notes'),
    class_tags:chipValues('class_tags').join(', '), method_tags:chipValues('method_tags').join(', '),
    strategy_1:val('strategy_1'), strategy_2:val('strategy_2'), strategy_3:val('strategy_3'), strategy_4:val('strategy_4'), strategy_5:val('strategy_5'),
@@ -96,10 +97,11 @@ function buildPreview(r){
 4. (${r.test_prompt}) 그림묘사 테스트 결과 - ${r.student_response}
 -
 <분석>
-${analysisLine('빠른 문장구성과 발화',r.fluency_rating,r.fluency_notes)}
+${analysisLine('빠른 문장구성과 발화 (말거리 정리 및 발속도)',r.fluency_rating,r.fluency_notes)}
 ${analysisLine('문법적 정확도',r.grammar_rating,r.grammar_notes)}
 ${analysisLine('어순',r.word_order_rating,r.word_order_notes)}
 ${analysisLine('문장확장',r.expansion_rating,r.expansion_notes)}
+${analysisLine('문단구성',r.paragraph_rating,r.paragraph_notes)}
 ${analysisLine('기초어휘',r.vocab_analysis_rating,r.vocab_analysis_notes)}
 -
 <수업전략>
