@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RM 스피킹 문법 학습기</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #ECEBE6;
+      color: #3A4F5C;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Noto Sans KR", sans-serif;
+    }
+    .loading { text-align: center; padding: 32px; }
+    .spinner {
+      width: 42px; height: 42px; margin: 0 auto 16px;
+      border: 4px solid #BBCBCD; border-top-color: #3A4F5C;
+      border-radius: 50%; animation: spin .8s linear infinite;
+    }
+    .title { font-weight: 800; font-size: 1.05rem; margin-bottom: 6px; }
+    .sub { color: #6E7C82; font-size: .82rem; }
+    .error { max-width: 520px; line-height: 1.7; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <main class="loading" id="status" aria-live="polite">
+    <div class="spinner"></div>
+    <div class="title">RM 스피킹 문법 학습기를 불러오는 중입니다.</div>
+    <div class="sub">잠시 후 자동으로 시작됩니다.</div>
+  </main>
+  <script>
+    (async () => {
+      if (typeof DecompressionStream === 'undefined') {
+        throw new Error('이 브라우저는 압축 해제 기능을 지원하지 않습니다. 최신 Chrome, Edge 또는 Safari로 접속해 주세요.');
+      }
+
+      const parts = await Promise.all(
+        [1, 2, 3, 4].map(async (number) => {
+          const response = await fetch(`payload-${number}.txt`, { cache: 'no-store' });
+          if (!response.ok) throw new Error(`학습기 데이터 ${number}번을 불러오지 못했습니다.`);
+          return (await response.text()).trim();
+        })
+      );
+
+      const binary = atob(parts.join(''));
+      const compressed = Uint8Array.from(binary, char => char.charCodeAt(0));
+      const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'));
+      const html = await new Response(stream).text();
+
+      document.open();
+      document.write(html);
+      document.close();
+    })().catch((error) => {
+      document.getElementById('status').innerHTML = `
+        <div class="error">
+          <div class="title">학습기를 불러오지 못했습니다.</div>
+          <div class="sub">${error.message}</div>
+        </div>`;
+      console.error(error);
+    });
+  </script>
+</body>
+</html>
