@@ -33,6 +33,17 @@ node scripts/run-rm-readonly.js --out-dir artifacts/rm-readonly
 
 GitHub Actions Secret으로는 `RM_GOOGLE_SERVICE_ACCOUNT_KEY_BASE64` 사용을 권장한다. Google OAuth scope는 `https://www.googleapis.com/auth/spreadsheets.readonly`만 허용한다.
 
+## GitHub Actions 자동 실행
+
+`.github/workflows/rm-readonly-daily.yml`은 다음 조건으로 실행된다.
+
+- `workflow_dispatch`: 수동 실행
+- `schedule`: 매일 22:00 UTC, 즉 07:00 KST
+
+workflow 권한은 `contents: read`만 사용한다. 먼저 전체 Node 테스트를 실행하고, `RM_GOOGLE_SERVICE_ACCOUNT_KEY_BASE64` 또는 `RM_GOOGLE_SERVICE_ACCOUNT_JSON` Secret이 있을 때만 실데이터 read-only runner를 실행한다. Secret이 없으면 job summary에 안전 skip 사유를 남기고 성공 종료한다.
+
+생성 artifact는 `rm-readonly-report` 이름으로 업로드하며 보존기간은 30일이다.
+
 ## 출력
 
 기본 출력 디렉터리는 `artifacts/rm-readonly`이며, 다음 파일을 생성한다.

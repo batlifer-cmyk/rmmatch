@@ -1,0 +1,70 @@
+name: RM Read-only Daily Report
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 22 * * *' # 07:00 KST
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Syntax check
+        run: find src config test scripts -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      - name: Run Node tests
+        run: |
+          for file in $(find test -name '*.test.js' | sort); do
+            node "$file"
+          done
+
+      - name: Check read-only Google credentials
+        id: credentials
+        env:
+          RM_GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.RM_GOOGLE_SERVICE_ACCOUNT_JSON }}
+          RM_GOOGLE_SERVICE_ACCOUNT_KEY_BASE64: ${{ secrets.RM_GOOGLE_SERVICE_ACCOUNT_KEY_BASE64 }}
+        run: |
+          if [ -n "$RM_GOOGLE_SERVICE_ACCOUNT_JSON" ] || [ -n "$RM_GOOGLE_SERVICE_ACCOUNT_KEY_BASE64" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Google Sheets read-only credentials are not configured; live runner skipped safely." >> "$GITHUB_STEP_SUMMARY"
+            echo "Set RM_GOOGLE_SERVICE_ACCOUNT_KEY_BASE64 or RM_GOOGLE_SERVICE_ACCOUNT_JSON to enable the live read-only run." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Run live read-only report
+        if: steps.credentials.outputs.available == 'true'
+        env:
+          RM_GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.RM_GOOGLE_SERVICE_ACCOUNT_JSON }}
+          RM_GOOGLE_SERVICE_ACCOUNT_KEY_BASE64: ${{ secrets.RM_GOOGLE_SERVICE_ACCOUNT_KEY_BASE64 }}
+        run: node scripts/run-rm-readonly.js --out-dir artifacts/rm-readonly
+
+      - name: Upload read-only report artifacts
+        if: steps.credentials.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rm-readonly-report
+          path: |
+            artifacts/rm-readonly/rm-report.json
+            artifacts/rm-readonly/rm-report.txt
+            artifacts/rm-readonly/rm-review-queue.csv
+            artifacts/rm-readonly/rm-run-manifest.json
+          retention-days: 30
+
+      - name: Summarize failure
+        if: failure()
+        run: |
+          echo "RM read-only daily workflow failed before producing a complete artifact set." >> "$GITHUB_STEP_SUMMARY"
+          echo "Inspect the failed step logs; no production Sheets write, Apps Script deploy, or external message send is performed by this workflow." >> "$GITHUB_STEP_SUMMARY"
