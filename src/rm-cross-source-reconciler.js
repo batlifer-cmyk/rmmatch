@@ -1,6 +1,11 @@
 'use strict';
 
-const { normalizeName, normalizePhone } = require('./student-identity-resolver');
+const {
+  normalizeName,
+  normalizePhone,
+  buildStudentIdentityCandidates,
+  matchPaymentToStudents,
+} = require('./student-identity-resolver');
 
 function normalizeDateKey(value) {
   if (!value) return '';
@@ -46,14 +51,35 @@ function reconcileOperationalData(data) {
   const registrationSignatures = new Map();
   const graduationReasonSignatures = new Map();
   const knownInstructorLabels = new Set((data.instructorNames ?? ['매튜', '데이빗', '캠벨', 'matthew', 'david', 'campbell']).map(normalizeName));
+  const identityCandidates = buildStudentIdentityCandidates(data);
 
   for (const payment of data.payments ?? []) {
-    const name = normalizeName(payment.studentName || payment.payerName);
-    if (!name) continue;
-    if (!paymentsByName.has(name)) paymentsByName.set(name, []);
-    paymentsByName.get(name).push(payment);
+    const identityMatch = matchPaymentToStudents(payment, identityCandidates);
+    const matchedName = normalizeName(identityMatch.match?.name || payment.studentName);
+    const fallbackName = normalizeName(payment.studentName || payment.payerName);
+    const name = matchedName || fallbackName;
     if (/TEST/i.test(payment.memo || '') || /TEST/i.test(payment.rawMessage || '')) {
       issues.push(recordIssue('RM-X-001', 'urgent', name, '테스트 표기가 있는 입금기록', [payment.sourceRow], '운영 집계 포함 여부 확인'));
+    }
+    if (!name) continue;
+    if (identityMatch.reviewRequired) {
+      const severity = identityMatch.confidence === 'conflict' ? 'urgent' : 'review';
+      issues.push(recordIssue(
+        'RM-X-011',
+        severity,
+        name,
+        `입금자-학생 매칭 ${identityMatch.confidence}: ${identityMatch.reasons.join(', ')}`,
+        [payment.sourceRow],
+        'student_id·전화번호·alias 근거를 확인하고 이름 단독 자동 확정 금지',
+      ));
+    }
+    if (identityMatch.confidence !== 'unmatched' && identityMatch.confidence !== 'conflict') {
+      if (!paymentsByName.has(name)) paymentsByName.set(name, []);
+      paymentsByName.get(name).push({ ...payment, identityMatch });
+    } else if (!paymentsByName.has(fallbackName)) {
+      paymentsByName.set(fallbackName, [payment]);
+    } else {
+      paymentsByName.get(fallbackName).push(payment);
     }
   }
 
