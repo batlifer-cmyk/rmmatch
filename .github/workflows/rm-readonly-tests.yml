@@ -33,3 +33,5 @@ jobs:
         run: node test/rm-readonly-source-adapter.test.js
       - name: Test pipeline
         run: node test/rm-readonly-pipeline.test.js
+      - name: Test live-data rules
+        run: node test/rm-live-data-rules.test.js
