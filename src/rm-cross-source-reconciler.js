@@ -20,12 +20,23 @@ function recordIssue(ruleId, severity, entity, evidence, sourceRows, action) {
   };
 }
 
+function registrationSignature(record) {
+  return [
+    normalizeName(record.studentName),
+    normalizeDateKey(record.registeredAt),
+    record.amount ?? '',
+    record.packageCount ?? '',
+  ].join('|');
+}
+
 function reconcileOperationalData(data) {
   const issues = [];
   const paymentsByName = new Map();
   const registrationsByName = new Map();
   const graduationByName = new Map();
   const lessonsByName = new Map();
+  const registrationSignatures = new Map();
+  const knownInstructorLabels = new Set((data.instructorNames ?? ['매튜', '데이빗', '캠벨', 'matthew', 'david', 'campbell']).map(normalizeName));
 
   for (const payment of data.payments ?? []) {
     const name = normalizeName(payment.studentName || payment.payerName);
@@ -45,11 +56,29 @@ function reconcileOperationalData(data) {
     if (registration.reviewRequired || registration.packageCount === 999) {
       issues.push(recordIssue('RM-X-002', 'urgent', name, `등록 검토 필요: 회차 ${registration.packageCount ?? '(공란)'}`, [registration.sourceRow], '등록 원문과 실제 학생 확인'));
     }
+    const signature = registrationSignature(registration);
+    if (!registrationSignatures.has(signature)) registrationSignatures.set(signature, []);
+    registrationSignatures.get(signature).push(registration);
+  }
+
+  for (const rows of registrationSignatures.values()) {
+    if (rows.length > 1) {
+      const sample = rows[0];
+      issues.push(recordIssue('RM-X-009', 'urgent', sample.studentName, `동일 학생·등록일·금액·회차 등록 ${rows.length}건`, rows.map((r) => r.sourceRow), '중복 등록 여부 확인 후 한 건만 유효 처리'));
+    }
   }
 
   for (const graduation of data.graduations ?? []) {
     const name = normalizeName(graduation.studentName);
     if (!name) continue;
+    if (/자동감지/.test(graduation.rawMessage || '') || graduation.status === '알림전송') {
+      issues.push(recordIssue('RM-X-008', 'review', name, '자동감지 알림행이 졸업로그에 혼재', [graduation.sourceRow], '확정 졸업과 후보 알림을 별도 상태·탭으로 분리'));
+      continue;
+    }
+    if (knownInstructorLabels.has(name)) {
+      issues.push(recordIssue('RM-X-007', 'urgent', name, '학생명 열에 강사명이 입력됨', [graduation.sourceRow], '원본문장에서 실제 학생명을 추출해 정정'));
+      continue;
+    }
     if (!graduationByName.has(name)) graduationByName.set(name, []);
     graduationByName.get(name).push(graduation);
   }
@@ -98,4 +127,4 @@ function reconcileOperationalData(data) {
   return issues;
 }
 
-module.exports = { normalizeDateKey, reconcileOperationalData };
+module.exports = { normalizeDateKey, registrationSignature, reconcileOperationalData };
