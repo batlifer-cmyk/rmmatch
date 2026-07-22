@@ -24,7 +24,12 @@ jobs:
         with:
           node-version: '22'
       - name: Syntax check
-        run: |
-          find src config test -name '*.js' -print0 | xargs -0 -n1 node --check
-      - name: Run tests
-        run: node --test test/*.test.js
+        run: find src config test -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Test anomaly detector
+        run: node test/operations-anomaly-detector.test.js
+      - name: Test identity resolver
+        run: node test/student-identity-resolver.test.js
+      - name: Test source adapters
+        run: node test/rm-readonly-source-adapter.test.js
+      - name: Test pipeline
+        run: node test/rm-readonly-pipeline.test.js
