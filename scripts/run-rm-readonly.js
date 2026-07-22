@@ -5,6 +5,7 @@ const path = require('node:path');
 const { createGoogleSheetsReadOnlyClient } = require('../src/google-sheets-readonly-client');
 const { runReadOnlyPipeline } = require('../src/rm-readonly-pipeline');
 const { writeReviewArtifacts } = require('../src/rm-review-artifacts');
+const { createDryRunClient } = require('../src/rm-dry-run-fixtures');
 
 function parseArgs(argv) {
   const args = { outDir: path.join(process.cwd(), 'artifacts', 'rm-readonly'), dryRun: false };
@@ -29,23 +30,6 @@ function usage() {
   ].join('\n');
 }
 
-function dryRunClient() {
-  const fixtures = {
-    'Master time data': [['Teacher', 'Date', 'Month', 'Day', 'Quarter', 'Student', 'Hours', 'Rate', 'Total amount', 'Class type', 'Note']],
-    '_DB_등록로그': [['등록일시', '학생명', '전화번호', '금액', '회차수', '담당강사', '입력자', '원본메시지', '상태', '수업유형']],
-    '_DB_졸업로그': [['처리일시', '학생명', '마지막수업일', '잔여', '사유', '처리자', '원본메시지', '상태']],
-    '입금로그': [['수신시각', '입금일시', '입금자', '입금액', '추가등록횟수', '강사구분', '판정', '시트행', '처리상태', '잔디전송', '원본문자', '메모']],
-    '학생연락처': [['학생명', '전화번호', '신뢰도']],
-    '학생정보': [['student_id', 'name', 'phone']],
-  };
-  return Object.freeze({
-    async getValues(_spreadsheetId, range) {
-      const match = String(range).match(/^'(.+)'!/);
-      return fixtures[match?.[1]] || [[]];
-    },
-  });
-}
-
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -53,7 +37,7 @@ async function main() {
     return;
   }
 
-  const client = args.dryRun ? dryRunClient() : createGoogleSheetsReadOnlyClient();
+  const client = args.dryRun ? createDryRunClient() : createGoogleSheetsReadOnlyClient();
   const result = await runReadOnlyPipeline(client, { continueOnSourceError: true });
   const written = writeReviewArtifacts(args.outDir, result);
   console.log(`RM read-only report written: ${written.reportPath}`);

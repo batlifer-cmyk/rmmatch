@@ -9,7 +9,7 @@ const workflowPath = path.join(__dirname, '..', '.github', 'workflows', 'rm-read
 
 test('daily workflow keeps minimal permissions and scheduled 07:00 KST run', () => {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
-  assert.match(workflow, /permissions:\n\s+contents: read/);
+  assert.match(workflow, /permissions:\r?\n\s+contents: read/);
   assert.match(workflow, /cron: '0 22 \* \* \*'/);
   assert.doesNotMatch(workflow, /contents: write|pull-requests: write|issues: write/);
 });
