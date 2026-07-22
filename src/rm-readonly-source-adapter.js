@@ -23,6 +23,10 @@ function isTemporaryStudentLabel(value) {
   return /^[A-Z0-9]{8,}$/i.test(label) || /^\d{6,}$/.test(label);
 }
 
+function rowHasData(row) {
+  return Array.isArray(row) && row.some((value) => value !== '' && value != null);
+}
+
 function adaptMasterTimeDataRow(row, sourceRow) {
   const [teacher, date, month, day, quarter, student, hours, rate, totalAmount, classType, note] = row;
   const rawHours = text(hours);
@@ -120,14 +124,16 @@ function adaptPaymentLogRow(row, sourceRow) {
 }
 
 function adaptRows(rows, adapter, startRow = 2) {
-  return (rows ?? [])
-    .map((row, index) => adapter(row, startRow + index))
-    .filter((item) => Object.values(item).some((value) => value !== '' && value !== null && value !== false));
+  return (rows ?? []).flatMap((row, index) => {
+    if (!rowHasData(row)) return [];
+    return [adapter(row, startRow + index)];
+  });
 }
 
 module.exports = {
   numberValue,
   isTemporaryStudentLabel,
+  rowHasData,
   adaptMasterTimeDataRow,
   adaptRegistrationLogRow,
   adaptGraduationLogRow,
