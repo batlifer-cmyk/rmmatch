@@ -43,13 +43,32 @@ async function readSource(client, sourceName, config = sourceConfig) {
     spreadsheetId: source.spreadsheetId,
     range: source.range,
     trustLevel: source.trustLevel,
+    success: true,
+    rowCount: rows.length,
     rows,
   };
 }
 
-async function readOperationalSnapshot(client, config = sourceConfig) {
+async function readOperationalSnapshot(client, config = sourceConfig, options = {}) {
   const names = ['lessons', 'registrations', 'graduations', 'payments', 'contacts', 'studentProfiles'];
-  const entries = await Promise.all(names.map(async (name) => [name, await readSource(client, name, config)]));
+  const entries = await Promise.all(names.map(async (name) => {
+    try {
+      return [name, await readSource(client, name, config)];
+    } catch (error) {
+      if (!options.continueOnError) throw error;
+      const source = config.sources[name] || {};
+      return [name, {
+        sourceName: name,
+        spreadsheetId: source.spreadsheetId || '',
+        range: source.range || '',
+        trustLevel: source.trustLevel || '',
+        success: false,
+        rowCount: 0,
+        error: error.message,
+        rows: [],
+      }];
+    }
+  }));
   return Object.fromEntries(entries);
 }
 

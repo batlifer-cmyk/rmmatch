@@ -69,7 +69,7 @@ function adaptRegistrationLogRow(row, sourceRow) {
     reviewRequired: temporaryName || suspiciousCount || sourceStatus === '확인필요',
     reviewReasons: [
       temporaryName ? '임시 또는 비정상 학생 식별값' : null,
-      suspiciousCount ? '설명되지 않은 비정상 회차수' : null,
+      suspiciousCount ? '비정상 회차수' : null,
       sourceStatus === '확인필요' ? '원천 상태 확인필요' : null,
     ].filter(Boolean),
   };
@@ -102,7 +102,7 @@ function adaptPaymentLogRow(row, sourceRow) {
 function adaptRows(rows, adapter, startRow = 2) {
   return (rows ?? []).flatMap((row, index) => {
     if (!rowHasData(row)) return [];
-    return [adapter(row, startRow + index)];
+    return [adapter(row, row.__sourceRow ?? startRow + index)];
   });
 }
 
