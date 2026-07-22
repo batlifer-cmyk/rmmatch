@@ -29,6 +29,14 @@ function registrationSignature(record) {
   ].join('|');
 }
 
+function graduationReasonSignature(record) {
+  return [
+    normalizeName(record.studentName),
+    normalizeDateKey(record.lastLessonDate || record.processedAt),
+    String(record.reason || '').trim().replace(/\s+/g, ' '),
+  ].join('|');
+}
+
 function reconcileOperationalData(data) {
   const issues = [];
   const paymentsByName = new Map();
@@ -36,6 +44,7 @@ function reconcileOperationalData(data) {
   const graduationByName = new Map();
   const lessonsByName = new Map();
   const registrationSignatures = new Map();
+  const graduationReasonSignatures = new Map();
   const knownInstructorLabels = new Set((data.instructorNames ?? ['매튜', '데이빗', '캠벨', 'matthew', 'david', 'campbell']).map(normalizeName));
 
   for (const payment of data.payments ?? []) {
@@ -51,11 +60,18 @@ function reconcileOperationalData(data) {
   for (const registration of data.registrations ?? []) {
     const name = normalizeName(registration.studentName);
     if (!name) continue;
+    const excludedFromPackageTotals = registration.excludedFromPackageTotals === true;
+    if (registration.reviewRequired || registration.packageCount === 999) {
+      const action = registration.transactionKind === 'UNKNOWN_999'
+        ? '회차 999가 실제 패키지가 아닌 판정 실패인지 원문 확인'
+        : '등록 원문과 실제 학생 확인';
+      issues.push(recordIssue('RM-X-002', 'urgent', name, `등록 검토 필요: 회차 ${registration.packageCount ?? '(공란)'}`, [registration.sourceRow], action));
+    }
+    if (excludedFromPackageTotals) {
+      continue;
+    }
     if (!registrationsByName.has(name)) registrationsByName.set(name, []);
     registrationsByName.get(name).push(registration);
-    if (registration.reviewRequired || registration.packageCount === 999) {
-      issues.push(recordIssue('RM-X-002', 'urgent', name, `등록 검토 필요: 회차 ${registration.packageCount ?? '(공란)'}`, [registration.sourceRow], '등록 원문과 실제 학생 확인'));
-    }
     const signature = registrationSignature(registration);
     if (!registrationSignatures.has(signature)) registrationSignatures.set(signature, []);
     registrationSignatures.get(signature).push(registration);
@@ -81,6 +97,16 @@ function reconcileOperationalData(data) {
     }
     if (!graduationByName.has(name)) graduationByName.set(name, []);
     graduationByName.get(name).push(graduation);
+    const reasonSignature = graduationReasonSignature(graduation);
+    if (!graduationReasonSignatures.has(reasonSignature)) graduationReasonSignatures.set(reasonSignature, []);
+    graduationReasonSignatures.get(reasonSignature).push(graduation);
+  }
+
+  for (const rows of graduationReasonSignatures.values()) {
+    if (rows.length > 1) {
+      const sample = rows[0];
+      issues.push(recordIssue('RM-X-010', 'review', sample.studentName, `동일 졸업사유·일자 후보 ${rows.length}건`, rows.map((r) => r.sourceRow), '분할 입력인지 중복 처리인지 확인하고 자동 확정하지 않음'));
+    }
   }
 
   for (const lesson of data.lessons ?? []) {
@@ -127,4 +153,4 @@ function reconcileOperationalData(data) {
   return issues;
 }
 
-module.exports = { normalizeDateKey, registrationSignature, reconcileOperationalData };
+module.exports = { normalizeDateKey, registrationSignature, graduationReasonSignature, reconcileOperationalData };
