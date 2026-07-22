@@ -35,6 +35,32 @@ test('reconciler detects test payments and unmatched records', () => {
   assert.ok(rules.includes('RM-X-004'));
 });
 
+test('reconciler reports payment identity confidence and avoids name-only certainty', () => {
+  const issues = reconcileOperationalData({
+    payments: [{ payerName: '보호자(익명학생A)', rawMessage: '가족 입금', sourceRow: 7 }],
+    registrations: [{ studentName: '익명학생A', packageCount: 8, sourceRow: 8 }],
+    contacts: [],
+  });
+  const identityIssue = issues.find((issue) => issue.rule_id === 'RM-X-011');
+  assert.ok(identityIssue);
+  assert.match(identityIssue.evidence, /review/);
+  assert.match(identityIssue.evidence, /family_payer/);
+});
+
+test('reconciler reports homonym payment conflicts', () => {
+  const issues = reconcileOperationalData({
+    payments: [{ payerName: '익명학생C', sourceRow: 11 }],
+    contacts: [
+      { studentName: '익명학생C', phone: '010-1000-0001', sourceRow: 21 },
+      { studentName: '익명학생C', phone: '010-1000-0002', sourceRow: 22 },
+    ],
+  });
+  const identityIssue = issues.find((issue) => issue.rule_id === 'RM-X-011');
+  assert.ok(identityIssue);
+  assert.equal(identityIssue.severity, 'urgent');
+  assert.match(identityIssue.evidence, /homonym_conflict/);
+});
+
 test('reconciler detects lessons after graduation', () => {
   const issues = reconcileOperationalData({
     payments: [], registrations: [], contacts: [],
