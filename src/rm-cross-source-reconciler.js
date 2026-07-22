@@ -1,12 +1,6 @@
 'use strict';
 
-const { normalizeName, normalizePhone, resolveStudentIdentity } = require('./student-identity-resolver');
-
-function toNumber(value) {
-  if (value == null || value === '') return null;
-  const number = Number(String(value).replace(/,/g, '').trim());
-  return Number.isFinite(number) ? number : null;
-}
+const { normalizeName, normalizePhone } = require('./student-identity-resolver');
 
 function normalizeDateKey(value) {
   if (!value) return '';
@@ -48,8 +42,8 @@ function reconcileOperationalData(data) {
     if (!name) continue;
     if (!registrationsByName.has(name)) registrationsByName.set(name, []);
     registrationsByName.get(name).push(registration);
-    if (registration.reviewRequired || registration.sessionCount === 999) {
-      issues.push(recordIssue('RM-X-002', 'urgent', name, `등록 검토 필요: 회차 ${registration.sessionCount ?? '(공란)'}`, [registration.sourceRow], '등록 원문과 실제 학생 확인'));
+    if (registration.reviewRequired || registration.packageCount === 999) {
+      issues.push(recordIssue('RM-X-002', 'urgent', name, `등록 검토 필요: 회차 ${registration.packageCount ?? '(공란)'}`, [registration.sourceRow], '등록 원문과 실제 학생 확인'));
     }
   }
 
@@ -68,23 +62,21 @@ function reconcileOperationalData(data) {
   }
 
   for (const [name, registrations] of registrationsByName) {
-    const payments = paymentsByName.get(name) ?? [];
-    if (payments.length === 0) {
+    if (!(paymentsByName.get(name) ?? []).length) {
       issues.push(recordIssue('RM-X-003', 'review', name, `등록 ${registrations.length}건, 대응 입금명 없음`, registrations.map((r) => r.sourceRow), '입금자명 차이 또는 카드결제 여부 확인'));
     }
   }
 
   for (const [name, payments] of paymentsByName) {
-    const registrations = registrationsByName.get(name) ?? [];
-    if (registrations.length === 0) {
+    if (!(registrationsByName.get(name) ?? []).length) {
       issues.push(recordIssue('RM-X-004', 'review', name, `입금 ${payments.length}건, 대응 등록명 없음`, payments.map((p) => p.sourceRow), '등록로그 누락 또는 입금자-학생 관계 확인'));
     }
   }
 
   for (const [name, graduations] of graduationByName) {
-    const latestGraduation = graduations.map((g) => normalizeDateKey(g.processedAt || g.lastLessonAt)).sort().at(-1);
-    const laterLessons = (lessonsByName.get(name) ?? []).filter((lesson) => normalizeDateKey(lesson.date) > latestGraduation);
-    if (latestGraduation && laterLessons.length > 0) {
+    const latestGraduation = graduations.map((g) => normalizeDateKey(g.processedAt || g.lastLessonDate)).sort().at(-1);
+    const laterLessons = (lessonsByName.get(name) ?? []).filter((lesson) => normalizeDateKey(lesson.lessonDate) > latestGraduation);
+    if (latestGraduation && laterLessons.length) {
       issues.push(recordIssue('RM-X-005', 'urgent', name, `졸업 처리일 이후 수업 ${laterLessons.length}건`, [...graduations.map((g) => g.sourceRow), ...laterLessons.map((l) => l.sourceRow)], '복귀·오입력·졸업상태 갱신 여부 확인'));
     }
   }
@@ -92,7 +84,7 @@ function reconcileOperationalData(data) {
   const contactGroups = new Map();
   for (const contact of data.contacts ?? []) {
     const name = normalizeName(contact.studentName || contact.name);
-    const phone = normalizePhone(contact.phone);
+    const phone = normalizePhone(contact.phone || contact.phoneNumber);
     if (!name || !phone) continue;
     if (!contactGroups.has(name)) contactGroups.set(name, new Set());
     contactGroups.get(name).add(phone);
@@ -106,4 +98,4 @@ function reconcileOperationalData(data) {
   return issues;
 }
 
-module.exports = { toNumber, normalizeDateKey, reconcileOperationalData };
+module.exports = { normalizeDateKey, reconcileOperationalData };
