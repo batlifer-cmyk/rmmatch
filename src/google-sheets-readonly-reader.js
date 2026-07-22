@@ -17,13 +17,15 @@ function assertReadOnlyClient(client) {
 function rowsToObjects(values) {
   if (!Array.isArray(values) || values.length === 0) return [];
   const headers = values[0].map((value) => String(value ?? '').trim());
-  return values.slice(1).filter((row) => row.some((value) => value !== '' && value != null)).map((row, index) => {
+  return values.slice(1).flatMap((row, index) => {
+    const hasData = Array.isArray(row) && row.some((value) => value !== '' && value != null);
+    if (!hasData) return [];
     const object = { __sourceRow: index + 2 };
     headers.forEach((header, columnIndex) => {
       if (!header) return;
       object[header] = row[columnIndex] ?? '';
     });
-    return object;
+    return [object];
   });
 }
 
