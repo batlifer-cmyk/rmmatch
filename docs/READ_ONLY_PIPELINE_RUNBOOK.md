@@ -35,12 +35,18 @@ GitHub Actions Secret으로는 `RM_GOOGLE_SERVICE_ACCOUNT_KEY_BASE64` 사용을 
 
 ## 출력
 
-기본 출력 디렉터리는 `artifacts/rm-readonly`이며, #9 단계에서는 다음 파일을 생성한다.
+기본 출력 디렉터리는 `artifacts/rm-readonly`이며, 다음 파일을 생성한다.
 
 - `rm-report.json`
 - `rm-report.txt`
+- `rm-review-queue.csv`
+- `rm-run-manifest.json`
 
 보고서의 `source_stats`에는 각 원천의 읽기 성공 여부, 변환 행 수, range, trust level, 실패 메시지를 기록한다. 일부 원천 읽기에 실패해도 `--dry-run`과 runner는 실패 원천을 보고서에 남기고 가능한 범위의 read-only 보고서를 생성한다.
+
+`rm-review-queue.csv`는 urgent를 먼저 정렬하고 전체 최대 50건만 포함한다. CSV 필드는 `검수상태, 심각도, 규칙ID, 마스킹 학생키, 원천시트, 원천행, 근거, 권장조치, 운영자메모`이며 기본 검수상태는 `판단보류`다. `=`, `+`, `-`, `@`로 시작하는 값은 CSV injection 방지를 위해 앞에 `'`를 붙인다.
+
+`rm-run-manifest.json`은 실행 시각, 원천별 성공/실패, 후보 건수, 출력 건수, 안전 조건을 기록한다.
 
 ## 금지
 - 운영 시트에 결과 탭 자동 생성

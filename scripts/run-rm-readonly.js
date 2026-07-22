@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 'use strict';
 
-const fs = require('node:fs');
 const path = require('node:path');
 const { createGoogleSheetsReadOnlyClient } = require('../src/google-sheets-readonly-client');
 const { runReadOnlyPipeline } = require('../src/rm-readonly-pipeline');
+const { writeReviewArtifacts } = require('../src/rm-review-artifacts');
 
 function parseArgs(argv) {
   const args = { outDir: path.join(process.cwd(), 'artifacts', 'rm-readonly'), dryRun: false };
@@ -46,15 +46,6 @@ function dryRunClient() {
   });
 }
 
-function writeArtifacts(outDir, result) {
-  fs.mkdirSync(outDir, { recursive: true });
-  const reportPath = path.join(outDir, 'rm-report.json');
-  const textPath = path.join(outDir, 'rm-report.txt');
-  fs.writeFileSync(reportPath, `${JSON.stringify(result.report, null, 2)}\n`);
-  fs.writeFileSync(textPath, `${result.textReport}\n`);
-  return { reportPath, textPath };
-}
-
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -64,9 +55,11 @@ async function main() {
 
   const client = args.dryRun ? dryRunClient() : createGoogleSheetsReadOnlyClient();
   const result = await runReadOnlyPipeline(client, { continueOnSourceError: true });
-  const written = writeArtifacts(args.outDir, result);
+  const written = writeReviewArtifacts(args.outDir, result);
   console.log(`RM read-only report written: ${written.reportPath}`);
   console.log(`RM read-only text report written: ${written.textPath}`);
+  console.log(`RM review queue written: ${written.reviewQueuePath}`);
+  console.log(`RM run manifest written: ${written.manifestPath}`);
 }
 
 main().catch((error) => {
