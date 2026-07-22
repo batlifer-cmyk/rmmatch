@@ -70,7 +70,11 @@ test('dry-run CLI writes JSON and TXT artifacts without credentials', () => {
 
   const report = JSON.parse(fs.readFileSync(path.join(outDir, 'rm-report.json'), 'utf8'));
   const text = fs.readFileSync(path.join(outDir, 'rm-report.txt'), 'utf8');
+  const csv = fs.readFileSync(path.join(outDir, 'rm-review-queue.csv'), 'utf8');
+  const manifest = JSON.parse(fs.readFileSync(path.join(outDir, 'rm-run-manifest.json'), 'utf8'));
   assert.equal(report.mode, 'READ_ONLY');
   assert.ok(report.source_stats.lessons);
   assert.match(text, /라이언멤버스 운영 이상탐지 보고서/);
+  assert.match(csv, /^검수상태,심각도,규칙ID,마스킹 학생키,원천시트,원천행,근거,권장조치,운영자메모/);
+  assert.equal(manifest.safety.production_writes, 0);
 });
