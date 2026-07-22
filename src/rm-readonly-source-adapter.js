@@ -29,8 +29,8 @@ function rowHasData(row) {
 
 function classifyRegistrationTransaction(rawMessage, packageCount) {
   const raw = text(rawMessage);
-  if (/취소 처리|상태.?취소|\[취소/.test(raw)) return 'CANCELLED';
-  if (/교재비|회차수 영향없음|신규 회차 아님|전환 차액|추가결제/.test(raw)) return 'NON_PACKAGE_ADJUSTMENT';
+  if (/취소 처리|상태.?취소|\[취소|등록취소|결제취소/.test(raw)) return 'CANCELLED';
+  if (/교재비|회차수 영향없음|신규 회차 아님|전환 차액|차액|추가결제|교재|비패키지/.test(raw)) return 'NON_PACKAGE_ADJUSTMENT';
   if (packageCount === 999) return 'UNKNOWN_999';
   return 'PACKAGE_REGISTRATION';
 }
