@@ -6,6 +6,7 @@ const path = require('node:path');
 const { test } = require('node:test');
 
 const workflowPath = path.join(__dirname, '..', '.github', 'workflows', 'rm-readonly-daily.yml');
+const testWorkflowPath = path.join(__dirname, '..', '.github', 'workflows', 'rm-readonly-tests.yml');
 
 test('daily workflow keeps minimal permissions and scheduled 07:00 KST run', () => {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
@@ -31,4 +32,11 @@ test('daily workflow runs tests before live runner and uploads all artifacts for
   assert.match(workflow, /rm-review-queue\.csv/);
   assert.match(workflow, /rm-run-manifest\.json/);
   assert.match(workflow, /retention-days: 30/);
+});
+
+test('pull request Linux workflow runs full syntax check and every Node test file', () => {
+  const workflow = fs.readFileSync(testWorkflowPath, 'utf8');
+  assert.match(workflow, /find src config test scripts -name '\*\.js'/);
+  assert.match(workflow, /for file in \$\(find test -name '\*\.test\.js' \| sort\)/);
+  assert.match(workflow, /node "\$file"/);
 });

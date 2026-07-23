@@ -12,7 +12,11 @@ function parseArgs(argv) {
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (value === '--dry-run') args.dryRun = true;
-    else if (value === '--out-dir') args.outDir = argv[++index];
+    else if (value === '--out-dir') {
+      const next = argv[++index];
+      if (!next || next.startsWith('--')) throw new Error('--out-dir requires a directory value');
+      args.outDir = next;
+    }
     else if (value === '--help') args.help = true;
     else throw new Error(`Unknown argument: ${value}`);
   }
@@ -39,7 +43,7 @@ async function main() {
 
   const client = args.dryRun ? createDryRunClient() : createGoogleSheetsReadOnlyClient();
   const result = await runReadOnlyPipeline(client, { continueOnSourceError: true });
-  const written = writeReviewArtifacts(args.outDir, result);
+  const written = writeReviewArtifacts(args.outDir, result, { baseDir: process.cwd() });
   console.log(`RM read-only report written: ${written.reportPath}`);
   console.log(`RM read-only text report written: ${written.textPath}`);
   console.log(`RM review queue written: ${written.reviewQueuePath}`);

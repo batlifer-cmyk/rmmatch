@@ -8,6 +8,8 @@ const { test } = require('node:test');
 const {
   REVIEW_HEADERS,
   sanitizeCsvCell,
+  sanitizeReportForArtifact,
+  resolveSafeOutputDir,
   buildReviewQueue,
   reviewQueueToCsv,
   buildRunManifest,
@@ -59,6 +61,29 @@ test('review queue CSV contains the required Korean headers and escapes injectio
 test('CSV sanitizer leaves safe masked values unchanged', () => {
   assert.equal(sanitizeCsvCell('김***'), '김***');
   assert.equal(sanitizeCsvCell('-danger'), "'-danger");
+  assert.equal(sanitizeCsvCell('\r=danger'), "'=danger");
+});
+
+test('artifact sanitizer removes raw personal fields and masks phone-like text', () => {
+  const safe = sanitizeReportForArtifact({
+    generated_at: '2026-07-23T00:00:00.000Z',
+    mode: 'READ_ONLY',
+    source_stats: {},
+    summary: { total: 1 },
+    issues: [{
+      rule_id: 'RM-X',
+      severity: 'review',
+      entity_key_masked: '김***',
+      studentName: '김민수',
+      phone: '010-1234-5678',
+      rawMessage: '김민수 원본문자',
+      evidence: '입금자 전화 010-1234-5678 확인',
+      recommended_action: '원본문자 열은 artifact에 싣지 않음',
+    }],
+  });
+  const serialized = JSON.stringify(safe);
+  assert.doesNotMatch(serialized, /김민수|010-1234-5678|rawMessage|studentName/);
+  assert.match(serialized, /\[masked-phone\]/);
 });
 
 test('manifest records zero production effects and source failures', () => {
@@ -78,8 +103,8 @@ test('manifest records zero production effects and source failures', () => {
 });
 
 test('artifact writer creates report, text, review queue, and manifest for zero issues', () => {
-  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-artifacts-'));
-  const artifacts = writeReviewArtifacts(outDir, {
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-artifacts-base-'));
+  const artifacts = writeReviewArtifacts('out', {
     report: {
       generated_at: '2026-07-23T00:00:00.000Z',
       mode: 'READ_ONLY',
@@ -88,7 +113,7 @@ test('artifact writer creates report, text, review queue, and manifest for zero 
       issues: [],
     },
     textReport: 'empty report',
-  });
+  }, { baseDir });
 
   for (const filePath of Object.values(artifacts)) {
     assert.equal(fs.existsSync(filePath), true);
@@ -96,4 +121,10 @@ test('artifact writer creates report, text, review queue, and manifest for zero 
   assert.equal(fs.readFileSync(artifacts.reviewQueuePath, 'utf8'), `${REVIEW_HEADERS.join(',')}\n`);
   const manifest = JSON.parse(fs.readFileSync(artifacts.manifestPath, 'utf8'));
   assert.equal(manifest.review_queue.emitted, 0);
+});
+
+test('artifact output path rejects traversal outside the working directory', () => {
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-artifacts-base-'));
+  assert.throws(() => resolveSafeOutputDir('..', { baseDir }), /must stay inside the working directory/);
+  assert.equal(resolveSafeOutputDir('safe/out', { baseDir }), path.join(baseDir, 'safe', 'out'));
 });

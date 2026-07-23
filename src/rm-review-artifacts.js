@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { toText } = require('./rm-report-builder');
 
 const REVIEW_HEADERS = [
   '검수상태',
@@ -17,6 +18,69 @@ const REVIEW_HEADERS = [
 
 const SEVERITY_ORDER = Object.freeze({ urgent: 0, review: 1, info: 2, suggestion: 3 });
 const REVIEW_STATUS_PENDING = '판단보류';
+const PHONE_PATTERN = /(?:\+?82[-\s.]?)?0?10[-\s.]?\d{3,4}[-\s.]?\d{4}/g;
+
+function redactArtifactText(value) {
+  return String(value ?? '')
+    .replace(/\r?\n|\r/g, ' ')
+    .replace(PHONE_PATTERN, '[masked-phone]')
+    .trim();
+}
+
+function sanitizeIssueForArtifact(issue = {}) {
+  return {
+    rule_id: redactArtifactText(issue.rule_id),
+    severity: redactArtifactText(issue.severity || 'info'),
+    entity_key_masked: redactArtifactText(issue.entity_key_masked || '*'),
+    source_sheet: redactArtifactText(issueSourceSheet(issue)),
+    source_rows: Array.isArray(issue.source_rows)
+      ? issue.source_rows.map((row) => redactArtifactText(row)).filter(Boolean)
+      : (issue.source_row == null ? [] : [redactArtifactText(issue.source_row)]),
+    evidence: redactArtifactText(issue.evidence),
+    recommended_action: redactArtifactText(issue.recommended_action),
+    status: redactArtifactText(issue.status || 'open'),
+    fingerprint: redactArtifactText(issue.fingerprint || issue.detection_id || ''),
+  };
+}
+
+function sanitizeSourceStats(sourceStats = {}) {
+  return Object.fromEntries(Object.entries(sourceStats).map(([source, stat]) => [source, {
+    ...stat,
+    error: stat?.error ? redactArtifactText(stat.error) : undefined,
+  }]));
+}
+
+function sanitizeReportForArtifact(report = {}) {
+  return {
+    schema_version: report.schema_version || '1.0.0',
+    generated_at: report.generated_at,
+    mode: report.mode || 'READ_ONLY',
+    source_stats: sanitizeSourceStats(report.source_stats || {}),
+    summary: report.summary || {},
+    warnings: (report.warnings || []).map(redactArtifactText),
+    issues: (report.issues || []).map(sanitizeIssueForArtifact),
+  };
+}
+
+function isPathInside(child, parent) {
+  const relative = path.relative(parent, child);
+  return relative === '' || (relative && !relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function resolveSafeOutputDir(outDir, options = {}) {
+  if (!outDir || typeof outDir !== 'string') {
+    throw new Error('Artifact output directory is required');
+  }
+  const baseDir = path.resolve(options.baseDir || process.cwd());
+  const resolved = path.resolve(baseDir, outDir);
+  if (!isPathInside(resolved, baseDir)) {
+    throw new Error('Artifact output directory must stay inside the working directory');
+  }
+  if (resolved === path.parse(resolved).root) {
+    throw new Error('Artifact output directory must not be a filesystem root');
+  }
+  return resolved;
+}
 
 function issueFingerprint(issue) {
   return issue.fingerprint || issue.detection_id || [
@@ -43,7 +107,7 @@ function deduplicateIssues(issues) {
 
 function buildReviewQueue(issues, options = {}) {
   const limit = options.limit ?? 50;
-  return deduplicateIssues(issues)
+  return deduplicateIssues((issues || []).map(sanitizeIssueForArtifact))
     .sort((left, right) => {
       const leftRank = SEVERITY_ORDER[left.severity] ?? 99;
       const rightRank = SEVERITY_ORDER[right.severity] ?? 99;
@@ -65,7 +129,7 @@ function buildReviewQueue(issues, options = {}) {
 }
 
 function sanitizeCsvCell(value) {
-  const text = String(value ?? '').replace(/\r?\n/g, ' ').trim();
+  const text = redactArtifactText(value);
   if (/^[=+\-@]/.test(text)) return `'${text}`;
   return text;
 }
@@ -94,7 +158,7 @@ function reviewQueueToCsv(queue) {
 }
 
 function buildRunManifest(result, options = {}) {
-  const report = result.report || {};
+  const report = sanitizeReportForArtifact(result.report || {});
   const queue = options.reviewQueue || buildReviewQueue(report.issues || []);
   const sourceStats = report.source_stats || {};
   return {
@@ -123,17 +187,19 @@ function buildRunManifest(result, options = {}) {
 }
 
 function writeReviewArtifacts(outDir, result, options = {}) {
-  fs.mkdirSync(outDir, { recursive: true });
-  const reviewQueue = buildReviewQueue(result.report?.issues || [], { limit: options.limit ?? 50 });
-  const manifest = buildRunManifest(result, { reviewQueue, limit: options.limit ?? 50 });
+  const safeOutDir = resolveSafeOutputDir(outDir, { baseDir: options.baseDir || process.cwd() });
+  fs.mkdirSync(safeOutDir, { recursive: true });
+  const safeReport = sanitizeReportForArtifact(result.report || {});
+  const reviewQueue = buildReviewQueue(safeReport.issues || [], { limit: options.limit ?? 50 });
+  const manifest = buildRunManifest({ report: safeReport }, { reviewQueue, limit: options.limit ?? 50 });
   const artifacts = {
-    reportPath: path.join(outDir, 'rm-report.json'),
-    textPath: path.join(outDir, 'rm-report.txt'),
-    reviewQueuePath: path.join(outDir, 'rm-review-queue.csv'),
-    manifestPath: path.join(outDir, 'rm-run-manifest.json'),
+    reportPath: path.join(safeOutDir, 'rm-report.json'),
+    textPath: path.join(safeOutDir, 'rm-report.txt'),
+    reviewQueuePath: path.join(safeOutDir, 'rm-review-queue.csv'),
+    manifestPath: path.join(safeOutDir, 'rm-run-manifest.json'),
   };
-  fs.writeFileSync(artifacts.reportPath, `${JSON.stringify(result.report, null, 2)}\n`);
-  fs.writeFileSync(artifacts.textPath, `${result.textReport || ''}\n`);
+  fs.writeFileSync(artifacts.reportPath, `${JSON.stringify(safeReport, null, 2)}\n`);
+  fs.writeFileSync(artifacts.textPath, `${toText(safeReport)}\n`);
   fs.writeFileSync(artifacts.reviewQueuePath, reviewQueueToCsv(reviewQueue));
   fs.writeFileSync(artifacts.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   return artifacts;
@@ -142,7 +208,11 @@ function writeReviewArtifacts(outDir, result, options = {}) {
 module.exports = {
   REVIEW_HEADERS,
   REVIEW_STATUS_PENDING,
+  redactArtifactText,
   sanitizeCsvCell,
+  sanitizeIssueForArtifact,
+  sanitizeReportForArtifact,
+  resolveSafeOutputDir,
   deduplicateIssues,
   buildReviewQueue,
   reviewQueueToCsv,

@@ -1,6 +1,8 @@
 // Ryan Members canonical student identity resolver.
 // Pure functions only: no network, spreadsheet, or write operations.
 
+const { normalizeDateForTimezone } = require('./rm-date-utils');
+
 function normalizeText(value) {
   return String(value ?? '').trim().replace(/\s+/g, ' ');
 }
@@ -22,10 +24,7 @@ function normalizePhone(value) {
 }
 
 function normalizeDate(value) {
-  if (!value) return '';
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toISOString().slice(0, 10);
+  return normalizeDateForTimezone(value);
 }
 
 function buildCandidate(record = {}) {

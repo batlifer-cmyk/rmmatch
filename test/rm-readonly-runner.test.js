@@ -62,17 +62,20 @@ test('pipeline report includes per-source success and failure stats', async () =
 });
 
 test('dry-run CLI writes JSON and TXT artifacts without credentials', () => {
-  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-readonly-'));
-  execFileSync(process.execPath, ['scripts/run-rm-readonly.js', '--dry-run', '--out-dir', outDir], {
-    cwd: path.join(__dirname, '..'),
+  const repoRoot = path.join(__dirname, '..');
+  const tempBase = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-readonly-base-'));
+  const outDir = 'rm-output';
+  execFileSync(process.execPath, [path.join(repoRoot, 'scripts/run-rm-readonly.js'), '--dry-run', '--out-dir', outDir], {
+    cwd: tempBase,
     env: { PATH: process.env.PATH },
     stdio: 'pipe',
   });
 
-  const report = JSON.parse(fs.readFileSync(path.join(outDir, 'rm-report.json'), 'utf8'));
-  const text = fs.readFileSync(path.join(outDir, 'rm-report.txt'), 'utf8');
-  const csv = fs.readFileSync(path.join(outDir, 'rm-review-queue.csv'), 'utf8');
-  const manifest = JSON.parse(fs.readFileSync(path.join(outDir, 'rm-run-manifest.json'), 'utf8'));
+  const fullOutDir = path.join(tempBase, outDir);
+  const report = JSON.parse(fs.readFileSync(path.join(fullOutDir, 'rm-report.json'), 'utf8'));
+  const text = fs.readFileSync(path.join(fullOutDir, 'rm-report.txt'), 'utf8');
+  const csv = fs.readFileSync(path.join(fullOutDir, 'rm-review-queue.csv'), 'utf8');
+  const manifest = JSON.parse(fs.readFileSync(path.join(fullOutDir, 'rm-run-manifest.json'), 'utf8'));
   assert.equal(report.mode, 'READ_ONLY');
   assert.ok(report.source_stats.lessons);
   assert.ok(report.summary.total > 0);
@@ -82,6 +85,19 @@ test('dry-run CLI writes JSON and TXT artifacts without credentials', () => {
   assert.match(csv, /입금로그/);
   assert.equal(manifest.safety.production_writes, 0);
   assert.equal(manifest.review_queue.emitted, report.summary.total);
+});
+
+test('dry-run CLI rejects output paths outside the working directory', () => {
+  const repoRoot = path.join(__dirname, '..');
+  const tempBase = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-readonly-base-'));
+  assert.throws(
+    () => execFileSync(process.execPath, [path.join(repoRoot, 'scripts/run-rm-readonly.js'), '--dry-run', '--out-dir', '..'], {
+      cwd: tempBase,
+      env: { PATH: process.env.PATH },
+      stdio: 'pipe',
+    }),
+    /Artifact output directory must stay inside the working directory/,
+  );
 });
 
 test('dry-run mock runs Reader to Reconciler to Matcher to Artifact inputs end-to-end', async () => {
@@ -96,4 +112,15 @@ test('dry-run mock runs Reader to Reconciler to Matcher to Artifact inputs end-t
   assert.ok(rules.includes('RM-X-011'));
   assert.ok(result.report.issues.every((issue) => issue.entity_key_masked && !issue.entity_key_masked.includes('익명학생')));
   assert.ok(result.report.issues.some((issue) => issue.source_sheet === '입금로그'));
+});
+
+test('dry-run mock is stable when run twice with the same generated time', async () => {
+  const options = {
+    continueOnSourceError: true,
+    generatedAt: new Date('2026-07-23T00:00:00.000Z'),
+  };
+  const first = await runReadOnlyPipeline(createDryRunClient(), options);
+  const second = await runReadOnlyPipeline(createDryRunClient(), options);
+  assert.deepEqual(second.report.summary, first.report.summary);
+  assert.deepEqual(second.report.issues, first.report.issues);
 });

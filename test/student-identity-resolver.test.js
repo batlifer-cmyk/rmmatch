@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const {
   normalizePhone,
+  normalizeDate,
   extractNameAliases,
   scorePaymentStudentMatch,
   matchPaymentToStudents,
@@ -11,6 +12,7 @@ const {
 
 assert.equal(normalizePhone('010-1234-5678'), '01012345678');
 assert.equal(normalizePhone('+82 10-1234-5678'), '01012345678');
+assert.equal(normalizeDate('2026-07-23T00:30:00+09:00'), '2026-07-23');
 
 assert.deepEqual(
   scoreIdentityMatch({ studentId: 'S001' }, { studentId: 'S001' }).confidence,

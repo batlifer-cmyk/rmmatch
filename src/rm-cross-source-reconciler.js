@@ -6,11 +6,11 @@ const {
   buildStudentIdentityCandidates,
   matchPaymentToStudents,
 } = require('./student-identity-resolver');
+const { normalizeDateForTimezone } = require('./rm-date-utils');
 
 function normalizeDateKey(value) {
   if (!value) return '';
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value).trim() : date.toISOString().slice(0, 10);
+  return normalizeDateForTimezone(value) || String(value).trim();
 }
 
 function recordIssue(ruleId, severity, entity, evidence, sourceRows, action, sourceSheet = '') {
