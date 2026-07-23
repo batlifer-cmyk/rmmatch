@@ -1,6 +1,10 @@
 const assert = require('node:assert/strict');
 const {
   normalizePhone,
+  normalizeDate,
+  extractNameAliases,
+  scorePaymentStudentMatch,
+  matchPaymentToStudents,
   scoreIdentityMatch,
   chooseCanonicalId,
   resolveIdentity,
@@ -8,6 +12,7 @@ const {
 
 assert.equal(normalizePhone('010-1234-5678'), '01012345678');
 assert.equal(normalizePhone('+82 10-1234-5678'), '01012345678');
+assert.equal(normalizeDate('2026-07-23T00:30:00+09:00'), '2026-07-23');
 
 assert.deepEqual(
   scoreIdentityMatch({ studentId: 'S001' }, { studentId: 'S001' }).confidence,
@@ -57,5 +62,41 @@ const ambiguous = resolveIdentity(
 
 assert.equal(ambiguous.reviewRequired, true);
 assert.equal(ambiguous.confidence, 'review');
+
+assert.deepEqual(extractNameAliases('보호자(익명학생A)'), ['보호자(익명학생a)', '익명학생a']);
+
+assert.equal(
+  scorePaymentStudentMatch(
+    { payerName: '보호자(익명학생A)', rawMessage: '가족 입금' },
+    { name: '익명학생A' },
+  ).confidence,
+  'review',
+);
+
+assert.ok(
+  scorePaymentStudentMatch(
+    { payerName: 'Student Jane' },
+    { name: 'Jane Student' },
+  ).reasons.includes('name_order_variant'),
+);
+
+assert.equal(
+  scorePaymentStudentMatch(
+    { payerName: '익명학생B', phone: '010-1111-2222' },
+    { name: '익명학생B', phone: '010-9999-8888' },
+  ).confidence,
+  'conflict',
+);
+
+const homonymPaymentMatch = matchPaymentToStudents(
+  { payerName: '익명학생C' },
+  [
+    { sourceRecordId: '1', name: '익명학생C', phone: '010-1000-0001' },
+    { sourceRecordId: '2', name: '익명학생C', phone: '010-1000-0002' },
+  ],
+);
+
+assert.equal(homonymPaymentMatch.confidence, 'conflict');
+assert.ok(homonymPaymentMatch.reasons.includes('homonym_conflict'));
 
 console.log('student identity resolver tests passed');

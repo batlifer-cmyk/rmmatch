@@ -12,7 +12,11 @@ const { reconcileOperationalData } = require('./rm-cross-source-reconciler');
 const { buildReport, toText } = require('./rm-report-builder');
 
 function objectRowsToArrays(rows, headers) {
-  return rows.map((row) => headers.map((header) => row[header] ?? ''));
+  return rows.map((row) => {
+    const values = headers.map((header) => row[header] ?? '');
+    Object.defineProperty(values, '__sourceRow', { value: row.__sourceRow, enumerable: false });
+    return values;
+  });
 }
 
 function normalizeContactRows(rows) {
@@ -41,23 +45,38 @@ function adaptSnapshot(snapshot) {
 }
 
 function sourceStats(adapted) {
-  return Object.fromEntries(Object.entries(adapted).map(([name, rows]) => [name, Array.isArray(rows) ? rows.length : 0]));
+  return Object.fromEntries(Object.entries(adapted).map(([name, rows]) => [name, {
+    success: true,
+    row_count: Array.isArray(rows) ? rows.length : 0,
+  }]));
+}
+
+function snapshotStats(snapshot, adapted) {
+  return Object.fromEntries(Object.entries(snapshot).map(([name, source]) => [name, {
+    success: source.success !== false,
+    row_count: Array.isArray(adapted[name]) ? adapted[name].length : 0,
+    range: source.range,
+    trust_level: source.trustLevel,
+    error: source.error || undefined,
+  }]));
 }
 
 async function runReadOnlyPipeline(client, options = {}) {
-  const snapshot = await readOperationalSnapshot(client, options.config);
+  const snapshot = await readOperationalSnapshot(client, options.config, { continueOnError: options.continueOnSourceError === true });
   const adapted = adaptSnapshot(snapshot);
+  const failedSources = Object.values(snapshot).filter((source) => source.success === false);
   const issues = reconcileOperationalData(adapted);
   const report = buildReport({
     generatedAt: options.generatedAt || new Date(),
-    sourceStats: sourceStats(adapted),
+    sourceStats: snapshotStats(snapshot, adapted),
     issues,
     warnings: [
       '학생명 단독 대조 결과는 확정 판정이 아니라 검토 후보입니다.',
       '카드결제·가족 입금·입금자와 수강생 이름이 다른 경우 오탐이 발생할 수 있습니다.',
+      ...failedSources.map((source) => `${source.sourceName} 원천 읽기 실패: ${source.error}`),
     ],
   });
   return { snapshot, adapted, report, textReport: toText(report) };
 }
 
-module.exports = { objectRowsToArrays, normalizeContactRows, adaptSnapshot, sourceStats, runReadOnlyPipeline };
+module.exports = { objectRowsToArrays, normalizeContactRows, adaptSnapshot, sourceStats, snapshotStats, runReadOnlyPipeline };

@@ -6,6 +6,7 @@ on:
       - 'src/**'
       - 'test/**'
       - 'config/**'
+      - 'scripts/**'
       - '.github/workflows/rm-readonly-tests.yml'
   workflow_dispatch:
 
@@ -24,14 +25,9 @@ jobs:
         with:
           node-version: '22'
       - name: Syntax check
-        run: find src config test -name '*.js' -print0 | xargs -0 -n1 node --check
-      - name: Test anomaly detector
-        run: node test/operations-anomaly-detector.test.js
-      - name: Test identity resolver
-        run: node test/student-identity-resolver.test.js
-      - name: Test source adapters
-        run: node test/rm-readonly-source-adapter.test.js
-      - name: Test pipeline
-        run: node test/rm-readonly-pipeline.test.js
-      - name: Test live-data rules
-        run: node test/rm-live-data-rules.test.js
+        run: find src config test scripts -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Run Node tests
+        run: |
+          for file in $(find test -name '*.test.js' | sort); do
+            node "$file"
+          done

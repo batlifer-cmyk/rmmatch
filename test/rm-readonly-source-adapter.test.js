@@ -36,6 +36,14 @@ assert.strictEqual(suspiciousRegistration.reviewRequired, true);
 assert.ok(suspiciousRegistration.reviewReasons.includes('비정상 회차수'));
 assert.ok(suspiciousRegistration.reviewReasons.includes('임시 또는 비정상 학생 식별값'));
 
+const nonPackageRegistration = adaptRegistrationLogRow(
+  ['2026-07-21 10:35:34', '익명학생', '', '30000', '999', '', '메이크자동화', '교재비 회차수 영향없음', '완료', ''],
+  4,
+);
+assert.strictEqual(nonPackageRegistration.transactionKind, 'NON_PACKAGE_ADJUSTMENT');
+assert.strictEqual(nonPackageRegistration.excludedFromPackageTotals, true);
+assert.strictEqual(nonPackageRegistration.reviewReasons.includes('비정상 회차수'), false);
+
 const graduation = adaptGraduationLogRow(
   ['2026. 7. 17 오후 3:43:31', '진유섭', '2026-07-13', '', '업무 후 이동 부담', 'RYAN CHOI', '원문', '확정'],
   3,
