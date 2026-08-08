@@ -18,20 +18,26 @@ html,body{margin:0;height:100%;overflow:hidden;background:#f5f4ef;font-family:sy
 <iframe id="app" src="legacy.html?v=legacy-20260808"></iframe>
 <script>
 const f=document.getElementById('app'),d=document.getElementById('diag'),st=document.getElementById('status');
-function inject(src){return new Promise((ok,fail)=>{const s=f.contentDocument.createElement('script');s.src=src+'?v=20260808-5';s.onload=ok;s.onerror=()=>fail(new Error(src+' 로드 실패'));f.contentDocument.body.appendChild(s);});}
-f.addEventListener('load',async()=>{try{await inject('v2-core.js');await inject('v2-ai.js');await inject('v2-io.js');await inject('v2-google.js');await inject('v2-calendar.js');st.textContent='패치 로드 완료 · 운영팀 Google Calendar 연결 지원';}catch(e){d.className='chip warn';d.textContent='패치 실패';st.textContent=e.message;}});
+function inject(src){return new Promise((ok,fail)=>{const s=f.contentDocument.createElement('script');s.src=src+'?v=20260808-7';s.onload=ok;s.onerror=()=>fail(new Error(src+' 로드 실패'));f.contentDocument.body.appendChild(s);});}
+f.addEventListener('load',async()=>{try{await inject('v2-core.js');await inject('v2-ai.js');await inject('v2-io.js');await inject('v2-snapshot.js');await inject('v2-google.js');await inject('v2-calendar.js');st.textContent='패치 로드 완료 · 강사 캘린더 BUSY 자동동기화';}catch(e){d.className='chip warn';d.textContent='패치 실패';st.textContent=e.message;}});
 addEventListener('message',e=>{
   if(e.origin!==location.origin||!e.data)return;
   if(e.data.type==='rmv2-ready'){
     const x=e.data.diag||{};d.className='chip '+(x.ok?'ok':'warn');d.textContent=x.ok?'자가점검 통과':'자가점검 실패';st.textContent=x.ok?'v2 '+x.version+' · 핵심 스케줄 점검 통과':'일부 안전패치 점검 실패';
   }
+  if(e.data.type==='rmv2-snapshot-ready'){
+    const x=e.data.snapshot||{};
+    st.textContent=x.fresh?'강사 캘린더 자동동기화 정상 · '+x.generatedAt:'캘린더 동기화 확인 필요'+(x.error?' · '+x.error:'');
+    if(!x.fresh){d.className='chip warn';d.textContent='캘린더 확인';}
+  }
   if(e.data.type==='rmv2-google-ready'){
     const x=e.data.google||{};
-    st.textContent=x.connected?'운영팀 Google 연결됨 · 강사 원본 Calendar 사용':x.configured?'Google Client ID 설정됨 · 운영팀 계정 연결 필요':'설정에서 Google OAuth Client ID를 입력하세요';
+    if(x.connected)st.textContent='운영팀 Google 직접연결됨 · 자동동기화 백업 사용 가능';
   }
   if(e.data.type==='rmv2-calendar-ready'){
     const x=e.data.calendar||{};
-    if(x.googleConnected)st.textContent='캘린더 패치 '+x.version+' · 원본 Google Calendar 연결됨';
+    if(x.snapshotFresh)st.textContent='캘린더 패치 '+x.version+' · 익명 BUSY 자동동기화 사용 중';
+    else if(x.googleConnected)st.textContent='캘린더 패치 '+x.version+' · Google 직접연결 사용 중';
   }
 });
 </script>
