@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 
-const RMV2_CALENDAR_VERSION='2026.08.08.3';
+const RMV2_CALENDAR_VERSION='2026.08.08.4';
 const PAUL_AVAILABILITY_REV='2026-08-08-paul-1';
 const CANONICAL={
   matthew:{calendarId:'matthew.g.mun@gmail.com',label:'RM 매튜 (강사소유 원본)'},
@@ -13,10 +13,8 @@ const CANONICAL={
 const OLD_DAVID_EMBED='https://calendar.google.com/calendar/embed?src=parkdavid0211%40gmail.com&ctz=Asia%2FSeoul';
 const unavailableCalendarInstructors=new Set();
 
-function normalizeCalendarSource(raw){
-  const value=String(raw||'').trim();
-  return value;
-}
+function normalizeCalendarSource(raw){return String(raw||'').trim();}
+function snapshotReader(){return window.__RMV2_SNAPSHOT__||null;}
 function googleReader(){return window.__RMV2_GOOGLE__||null;}
 function googleConnected(){const g=googleReader();return !!(g&&typeof g.token==='function'&&g.token());}
 
@@ -29,7 +27,6 @@ function migrateInstructorSources(){
     if(ins.calendarSourceLabel!==c.label){ins.calendarSourceLabel=c.label;dirty=true;}
     if(ins.id==='david'&&ins.calId===OLD_DAVID_EMBED){ins.calId='';dirty=true;}
   });
-
   const paul=instructors.find(i=>i&&i.id==='paul');
   if(paul&&paul.rmv2AvailabilityRevision!==PAUL_AVAILABILITY_REV){
     paul.days=['월','화','수','목','금','토'];
@@ -41,8 +38,7 @@ function migrateInstructorSources(){
       '금':['19:00','20:00','21:00'],
       '토':['10:00','11:00','12:00','13:00']
     };
-    paul.rmv2AvailabilityRevision=PAUL_AVAILABILITY_REV;
-    dirty=true;
+    paul.rmv2AvailabilityRevision=PAUL_AVAILABILITY_REV;dirty=true;
   }
   return dirty;
 }
@@ -63,21 +59,33 @@ if(typeof fetchICS==='function'){
   fetchICS=async function(ins){
     if(!ins)return[];
     if(ins.calendarId){
+      const snap=snapshotReader();
+      if(snap&&typeof snap.load==='function'&&typeof snap.slotsFor==='function'){
+        try{
+          await snap.load(false);
+          const snapshotSlots=snap.slotsFor(ins.id);
+          if(snapshotSlots!==null){
+            if(typeof icsCache==='object')icsCache[ins.id]={fetched:Date.now(),slots:snapshotSlots,transport:'busy-snapshot',ok:true,generatedAt:snap.state&&snap.state.data&&snap.state.data.generatedAt||''};
+            unavailableCalendarInstructors.delete(ins.id);
+            return snapshotSlots;
+          }
+        }catch(_){ }
+      }
       const g=googleReader();
-      if(!g||typeof g.fetchInstructorCalendar!=='function'||!googleConnected()){
-        unavailableCalendarInstructors.add(ins.id);
-        if(typeof icsCache==='object')icsCache[ins.id]={fetched:Date.now(),slots:[],transport:'google-auth-required',ok:false,error:'RMHQ Google 로그인 필요'};
-        return[];
+      if(g&&typeof g.fetchInstructorCalendar==='function'&&googleConnected()){
+        try{
+          const slots=await g.fetchInstructorCalendar(ins);
+          unavailableCalendarInstructors.delete(ins.id);
+          return Array.isArray(slots)?slots:[];
+        }catch(e){
+          unavailableCalendarInstructors.add(ins.id);
+          if(typeof icsCache==='object')icsCache[ins.id]={fetched:Date.now(),slots:[],transport:'google-api-failed',ok:false,error:e&&e.message||String(e)};
+          return[];
+        }
       }
-      try{
-        const slots=await g.fetchInstructorCalendar(ins);
-        unavailableCalendarInstructors.delete(ins.id);
-        return Array.isArray(slots)?slots:[];
-      }catch(e){
-        unavailableCalendarInstructors.add(ins.id);
-        if(typeof icsCache==='object')icsCache[ins.id]={fetched:Date.now(),slots:[],transport:'google-api-failed',ok:false,error:e&&e.message||String(e)};
-        return[];
-      }
+      unavailableCalendarInstructors.add(ins.id);
+      if(typeof icsCache==='object')icsCache[ins.id]={fetched:Date.now(),slots:[],transport:'calendar-source-unavailable',ok:false,error:'캘린더 자동동기화가 오래되었고 Google 직접연결도 없습니다.'};
+      return[];
     }
     const source=normalizeCalendarSource(ins.calId||'');
     if(!source){unavailableCalendarInstructors.delete(ins.id);return[];}
@@ -91,10 +99,7 @@ if(typeof fetchICS==='function'){
 
 if(typeof isConflictICS==='function'){
   const originalIsConflictICS=isConflictICS;
-  isConflictICS=function(insId,day,time){
-    if(unavailableCalendarInstructors.has(insId))return true;
-    return originalIsConflictICS(insId,day,time);
-  };
+  isConflictICS=function(insId,day,time){if(unavailableCalendarInstructors.has(insId))return true;return originalIsConflictICS(insId,day,time);};
   isConflict=function(insId,day,time){return isConflictICS(insId,day,time);};
 }
 
@@ -106,9 +111,9 @@ if(typeof testAllICS==='function'){
     const rows=[];
     for(const ins of instructors){
       if(!ins.calendarId&&!ins.calId){rows.push('⚪ <b>'+ins.name+'</b> — 일정 소스 미설정');continue;}
-      const slots=await fetchICS(ins);
-      const c=(typeof icsCache==='object'&&icsCache[ins.id])||{};
-      if(c.ok)rows.push('✅ <b>'+ins.name+'</b> — '+slots.length+'개 일정 · '+(c.transport==='google-api'?'Google API':'ICS'));
+      const slots=await fetchICS(ins);const c=(typeof icsCache==='object'&&icsCache[ins.id])||{};
+      const sourceLabel=c.transport==='busy-snapshot'?'자동동기화':c.transport==='google-api'?'Google API':'ICS';
+      if(c.ok)rows.push('✅ <b>'+ins.name+'</b> — '+slots.length+'개 BUSY · '+sourceLabel);
       else rows.push('❌ <b>'+ins.name+'</b> — '+(c.error||'연결 실패'));
     }
     if(statusEl)statusEl.innerHTML=rows.map(x=>'<div style="margin-bottom:6px">'+x+'</div>').join('');
@@ -117,26 +122,24 @@ if(typeof testAllICS==='function'){
 
 function patchCalendarUi(){
   const input=document.getElementById('modal-calid');
-  if(input){
-    const group=input.closest('.form-group');const label=group&&group.querySelector('label');
-    if(label)label.textContent='보조 ICS URL';
-    input.placeholder='Google API 미사용 강사용 ICS URL';
-  }
+  if(input){const group=input.closest('.form-group');const label=group&&group.querySelector('label');if(label)label.textContent='보조 ICS URL';input.placeholder='자동동기화 미사용 강사용 ICS URL';}
   const settings=document.getElementById('page-settings');
   if(settings){
     const notices=Array.from(settings.querySelectorAll('.notice'));
     const old=notices.find(n=>/강사별 ICS URL|강사별 일정 소스/.test(n.textContent||''));
-    if(old)old.innerHTML='<b>Matthew · David · Paul · Jenna · Dean</b>은 운영팀 Google 로그인 후 강사 원본 Google Calendar를 직접 읽습니다. 다른 강사는 필요하면 보조 ICS URL을 사용할 수 있습니다.';
+    if(old)old.innerHTML='<b>Matthew · David · Paul · Jenna · Dean</b>은 익명 BUSY 스냅샷을 우선 사용합니다. 학생 이름·설명·참석자 정보는 스케줄러에 저장하지 않습니다. Google 직접연결은 백업 수단입니다.';
     if(!document.getElementById('rmv2CalendarSourceNotice')){
       const box=document.createElement('div');box.id='rmv2CalendarSourceNotice';box.className='notice';box.style.marginTop='12px';
-      box.innerHTML='<b>중앙 캘린더:</b> Matthew/David는 강사소유 원본, Paul/Jenna/Dean은 RM 운영 원본을 사용합니다. Google API가 연결되지 않거나 조회에 실패한 강사는 빈 시간으로 간주하지 않고 자동 추천에서 차단합니다. Paul 가능시간은 2026-08-10 변경분을 반영했습니다.';
+      box.innerHTML='<b>중앙 캘린더:</b> Matthew/David는 강사소유 원본, Paul/Jenna/Dean은 RM 운영 원본에서 BUSY 시간만 동기화합니다. 종일 가능시간 메모는 BUSY에서 제외합니다. 동기화가 오래되면 빈 시간으로 오인하지 않고 해당 강사 추천을 차단합니다.';
       const status=document.getElementById('ics-status');if(status)status.insertAdjacentElement('beforebegin',box);
     }
   }
 }
 
 patchCalendarUi();
-const calendarDiagnostics={version:RMV2_CALENDAR_VERSION,canonical:CANONICAL,paulAvailabilityRevision:PAUL_AVAILABILITY_REV,unavailableCalendarInstructors,googleConnected};
+const snap=snapshotReader();
+const snapshotFresh=!!(snap&&typeof snap.isFresh==='function'&&snap.isFresh());
+const calendarDiagnostics={version:RMV2_CALENDAR_VERSION,canonical:CANONICAL,paulAvailabilityRevision:PAUL_AVAILABILITY_REV,unavailableCalendarInstructors,googleConnected,snapshotFresh};
 window.__RMV2_CALENDAR__=calendarDiagnostics;
-try{parent.postMessage({type:'rmv2-calendar-ready',calendar:{version:RMV2_CALENDAR_VERSION,davidConfigured:true,googleConnected:googleConnected(),paulAvailabilityRevision:PAUL_AVAILABILITY_REV}},location.origin);}catch(_){ }
+try{parent.postMessage({type:'rmv2-calendar-ready',calendar:{version:RMV2_CALENDAR_VERSION,davidConfigured:true,googleConnected:googleConnected(),snapshotFresh,paulAvailabilityRevision:PAUL_AVAILABILITY_REV}},location.origin);}catch(_){ }
 })();
