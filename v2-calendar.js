@@ -1,10 +1,11 @@
 (function(){
 'use strict';
 
-const RMV2_CALENDAR_VERSION='2026.08.08.1';
+const RMV2_CALENDAR_VERSION='2026.08.08.2';
 const DAVID_CALENDAR_ID='parkdavid0211@gmail.com';
 const DAVID_EMBED_URL='https://calendar.google.com/calendar/embed?src=parkdavid0211%40gmail.com&ctz=Asia%2FSeoul';
 const PAUL_AVAILABILITY_REV='2026-08-08-paul-1';
+const unavailableCalendarInstructors=new Set();
 
 function googlePublicIcs(calendarId){
   return 'https://calendar.google.com/calendar/ical/'+encodeURIComponent(calendarId)+'/public/basic.ics';
@@ -62,6 +63,7 @@ if(typeof loadData==='function'){
     const dirty=migrateInstructorSources();
     if(dirty&&typeof saveData==='function')saveData();
     if(typeof refreshInsSel==='function')refreshInsSel();
+    try{if(typeof icsCache==='object'){delete icsCache.david;delete icsCache.paul;}}catch(_){ }
   };
 }
 
@@ -70,17 +72,30 @@ if(typeof fetchICS==='function'){
   fetchICS=async function(ins){
     if(!ins)return[];
     const source=normalizeCalendarSource(ins.calId||'');
-    if(!source)return[];
-    if(source===ins.calId)return originalFetchICS(ins);
-    const proxyIns=Object.assign({},ins,{calId:source});
-    return originalFetchICS(proxyIns);
+    if(!source){unavailableCalendarInstructors.delete(ins.id);return[];}
+    const proxyIns=source===ins.calId?ins:Object.assign({},ins,{calId:source});
+    const slots=await originalFetchICS(proxyIns);
+    const cache=(typeof icsCache==='object'&&icsCache)?icsCache[ins.id]:null;
+    if(cache&&cache.ok===false)unavailableCalendarInstructors.add(ins.id);
+    else unavailableCalendarInstructors.delete(ins.id);
+    return slots;
   };
+}
+
+if(typeof isConflictICS==='function'){
+  const originalIsConflictICS=isConflictICS;
+  isConflictICS=function(insId,day,time){
+    if(unavailableCalendarInstructors.has(insId))return true;
+    return originalIsConflictICS(insId,day,time);
+  };
+  isConflict=function(insId,day,time){return isConflictICS(insId,day,time);};
 }
 
 function patchCalendarUi(){
   const input=document.getElementById('modal-calid');
   if(input){
-    const label=input.closest('.form-group')&&input.closest('.form-group').querySelector('label');
+    const group=input.closest('.form-group');
+    const label=group&&group.querySelector('label');
     if(label)label.textContent='캘린더 URL / Google Calendar ID';
     input.placeholder='Google Calendar embed URL · calendar@gmail.com · ICS URL';
   }
@@ -88,13 +103,13 @@ function patchCalendarUi(){
   if(settings){
     const notices=Array.from(settings.querySelectorAll('.notice'));
     const old=notices.find(n=>/강사별 ICS URL/.test(n.textContent||''));
-    if(old)old.innerHTML='강사별 일정 소스는 <b>강사 설정 → 편집 → 캘린더 URL / Google Calendar ID</b>에서 관리합니다. Google Calendar embed 주소나 캘린더 ID(email 형태)를 넣으면 public ICS 형식으로 자동 변환합니다.';
+    if(old)old.innerHTML='강사별 일정 소스는 <b>강사 설정 → 편집 → 캘린더 URL / Google Calendar ID</b>에서 관리합니다. Google Calendar embed 주소나 캘린더 ID(email 형태)는 public ICS 후보 주소로 자동 변환합니다. 연결 실패 시 해당 강사는 안전을 위해 추천에서 차단됩니다.';
     if(!document.getElementById('rmv2CalendarSourceNotice')){
       const box=document.createElement('div');
       box.id='rmv2CalendarSourceNotice';
       box.className='notice';
       box.style.marginTop='12px';
-      box.innerHTML='<b>중앙 소스 보정:</b> David는 <code>parkdavid0211@gmail.com</code> 원본 캘린더를 기본 소스로 사용합니다. Paul 가능시간은 2026-08-10부터 전달받은 새 시간대로 반영했습니다.';
+      box.innerHTML='<b>중앙 소스 보정:</b> David는 <code>parkdavid0211@gmail.com</code> 원본 캘린더 ID를 저장합니다. Paul 가능시간은 2026-08-10부터 전달받은 새 시간대로 반영했습니다. David 원본이 비공개 공유 상태여서 브라우저 ICS 연결이 실패하면 David는 자동 추천에서 제외됩니다.';
       const status=document.getElementById('ics-status');
       if(status)status.insertAdjacentElement('beforebegin',box);
     }
@@ -108,6 +123,7 @@ const calendarDiagnostics={
   davidCalendarId:DAVID_CALENDAR_ID,
   davidConfigured:true,
   paulAvailabilityRevision:PAUL_AVAILABILITY_REV,
+  unavailableCalendarInstructors,
   normalizeCalendarSource
 };
 window.__RMV2_CALENDAR__=calendarDiagnostics;
