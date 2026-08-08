@@ -18,9 +18,18 @@ html,body{margin:0;height:100%;overflow:hidden;background:#f5f4ef;font-family:sy
 <iframe id="app" src="legacy.html?v=legacy-20260808"></iframe>
 <script>
 const f=document.getElementById('app'),d=document.getElementById('diag'),st=document.getElementById('status');
-function inject(src){return new Promise((ok,fail)=>{const s=f.contentDocument.createElement('script');s.src=src+'?v=20260808-3';s.onload=ok;s.onerror=()=>fail(new Error(src+' 로드 실패'));f.contentDocument.body.appendChild(s);});}
-f.addEventListener('load',async()=>{try{await inject('v2-core.js');await inject('v2-ai.js');await inject('v2-io.js');st.textContent='패치 로드 완료 · 실제 날짜와 수업 길이 기준으로 충돌 판정';}catch(e){d.className='chip warn';d.textContent='패치 실패';st.textContent=e.message;}});
-addEventListener('message',e=>{if(e.origin!==location.origin||!e.data||e.data.type!=='rmv2-ready')return;const x=e.data.diag||{};d.className='chip '+(x.ok?'ok':'warn');d.textContent=x.ok?'자가점검 통과':'자가점검 실패';st.textContent=x.ok?'v2 '+x.version+' · 오늘 운영 가능':'일부 안전패치 점검 실패';});
+function inject(src){return new Promise((ok,fail)=>{const s=f.contentDocument.createElement('script');s.src=src+'?v=20260808-4';s.onload=ok;s.onerror=()=>fail(new Error(src+' 로드 실패'));f.contentDocument.body.appendChild(s);});}
+f.addEventListener('load',async()=>{try{await inject('v2-core.js');await inject('v2-ai.js');await inject('v2-io.js');await inject('v2-calendar.js');st.textContent='패치 로드 완료 · 실제 날짜/수업길이/강사 캘린더 소스 기준 충돌 판정';}catch(e){d.className='chip warn';d.textContent='패치 실패';st.textContent=e.message;}});
+addEventListener('message',e=>{
+  if(e.origin!==location.origin||!e.data)return;
+  if(e.data.type==='rmv2-ready'){
+    const x=e.data.diag||{};d.className='chip '+(x.ok?'ok':'warn');d.textContent=x.ok?'자가점검 통과':'자가점검 실패';st.textContent=x.ok?'v2 '+x.version+' · 핵심 스케줄 점검 통과':'일부 안전패치 점검 실패';
+  }
+  if(e.data.type==='rmv2-calendar-ready'){
+    const x=e.data.calendar||{};
+    if(x.davidConfigured)st.textContent='캘린더 패치 '+x.version+' · David 원본 소스 설정 · Paul 새 가능시간 반영';
+  }
+});
 </script>
 </body>
 </html>
