@@ -1,8 +1,10 @@
 (function(){
 'use strict';
 
-const RMV2_CALENDAR_VERSION='2026.08.08.4';
+const RMV2_CALENDAR_VERSION='2026.08.09.1';
 const PAUL_AVAILABILITY_REV='2026-08-08-paul-1';
+const JENNA_AVAILABILITY_REV='2026-08-09-jenna-1';
+const DEAN_AVAILABILITY_REV='2026-08-09-dean-1';
 const CANONICAL={
   matthew:{calendarId:'matthew.g.mun@gmail.com',label:'RM 매튜 (강사소유 원본)'},
   david:{calendarId:'parkdavid0211@gmail.com',label:'RM 데이빗 (강사소유 원본)'},
@@ -27,6 +29,7 @@ function migrateInstructorSources(){
     if(ins.calendarSourceLabel!==c.label){ins.calendarSourceLabel=c.label;dirty=true;}
     if(ins.id==='david'&&ins.calId===OLD_DAVID_EMBED){ins.calId='';dirty=true;}
   });
+
   const paul=instructors.find(i=>i&&i.id==='paul');
   if(paul&&paul.rmv2AvailabilityRevision!==PAUL_AVAILABILITY_REV){
     paul.days=['월','화','수','목','금','토'];
@@ -39,6 +42,28 @@ function migrateInstructorSources(){
       '토':['10:00','11:00','12:00','13:00']
     };
     paul.rmv2AvailabilityRevision=PAUL_AVAILABILITY_REV;dirty=true;
+  }
+
+  const jenna=instructors.find(i=>i&&i.id==='jenna');
+  if(jenna&&jenna.rmv2AvailabilityRevision!==JENNA_AVAILABILITY_REV){
+    jenna.days=['수','금'];
+    jenna.times=['10:00','11:00','12:00','13:00'];
+    jenna.dayTimes={
+      '수':['10:00','11:00','12:00','13:00'],
+      '금':['10:00','11:00','12:00','13:00']
+    };
+    jenna.rmv2AvailabilityRevision=JENNA_AVAILABILITY_REV;dirty=true;
+  }
+
+  const dean=instructors.find(i=>i&&i.id==='dean');
+  if(dean&&dean.rmv2AvailabilityRevision!==DEAN_AVAILABILITY_REV){
+    dean.days=['토','일'];
+    dean.times=['17:00','18:00','19:00','20:00','21:00'];
+    dean.dayTimes={
+      '토':['17:00','18:00','19:00','20:00','21:00'],
+      '일':['17:00','18:00','19:00','20:00','21:00']
+    };
+    dean.rmv2AvailabilityRevision=DEAN_AVAILABILITY_REV;dirty=true;
   }
   return dirty;
 }
@@ -130,7 +155,7 @@ function patchCalendarUi(){
     if(old)old.innerHTML='<b>Matthew · David · Paul · Jenna · Dean</b>은 익명 BUSY 스냅샷을 우선 사용합니다. 학생 이름·설명·참석자 정보는 스케줄러에 저장하지 않습니다. Google 직접연결은 백업 수단입니다.';
     if(!document.getElementById('rmv2CalendarSourceNotice')){
       const box=document.createElement('div');box.id='rmv2CalendarSourceNotice';box.className='notice';box.style.marginTop='12px';
-      box.innerHTML='<b>중앙 캘린더:</b> Matthew/David는 강사소유 원본, Paul/Jenna/Dean은 RM 운영 원본에서 BUSY 시간만 동기화합니다. 종일 가능시간 메모는 BUSY에서 제외합니다. 동기화가 오래되면 빈 시간으로 오인하지 않고 해당 강사 추천을 차단합니다.';
+      box.innerHTML='<b>중앙 캘린더:</b> Matthew/David는 강사소유 원본, Paul/Jenna/Dean은 RM 운영 원본에서 BUSY 시간만 동기화합니다. 종일 가능시간 메모는 BUSY에서 제외합니다. 동기화가 3시간 이상 오래되면 빈 시간으로 오인하지 않고 해당 강사 추천을 차단합니다.';
       const status=document.getElementById('ics-status');if(status)status.insertAdjacentElement('beforebegin',box);
     }
   }
@@ -139,7 +164,7 @@ function patchCalendarUi(){
 patchCalendarUi();
 const snap=snapshotReader();
 const snapshotFresh=!!(snap&&typeof snap.isFresh==='function'&&snap.isFresh());
-const calendarDiagnostics={version:RMV2_CALENDAR_VERSION,canonical:CANONICAL,paulAvailabilityRevision:PAUL_AVAILABILITY_REV,unavailableCalendarInstructors,googleConnected,snapshotFresh};
+const calendarDiagnostics={version:RMV2_CALENDAR_VERSION,canonical:CANONICAL,paulAvailabilityRevision:PAUL_AVAILABILITY_REV,jennaAvailabilityRevision:JENNA_AVAILABILITY_REV,deanAvailabilityRevision:DEAN_AVAILABILITY_REV,unavailableCalendarInstructors,googleConnected,snapshotFresh};
 window.__RMV2_CALENDAR__=calendarDiagnostics;
-try{parent.postMessage({type:'rmv2-calendar-ready',calendar:{version:RMV2_CALENDAR_VERSION,davidConfigured:true,googleConnected:googleConnected(),snapshotFresh,paulAvailabilityRevision:PAUL_AVAILABILITY_REV}},location.origin);}catch(_){ }
+try{parent.postMessage({type:'rmv2-calendar-ready',calendar:{version:RMV2_CALENDAR_VERSION,davidConfigured:true,googleConnected:googleConnected(),snapshotFresh,paulAvailabilityRevision:PAUL_AVAILABILITY_REV,jennaAvailabilityRevision:JENNA_AVAILABILITY_REV,deanAvailabilityRevision:DEAN_AVAILABILITY_REV}},location.origin);}catch(_){ }
 })();
