@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 
-const VERSION='2026.08.08.1';
+const VERSION='2026.08.08.2';
 const CLIENT_KEY='rm_google_oauth_client_id';
 const TOKEN_KEY='rm_google_access_token';
 const EXP_KEY='rm_google_access_token_exp';
@@ -100,7 +100,7 @@ function injectUi(){
   const page=document.getElementById('page-settings');
   if(!page||document.getElementById('rmGoogleAuthCard'))return;
   const card=document.createElement('div');card.id='rmGoogleAuthCard';card.className='card';
-  card.innerHTML='<div class="card-title">Google Calendar · 운영팀 계정</div>'+ '<div class="notice">스케줄러는 <b>ryanmembers.rmhq@gmail.com</b>으로 로그인해 강사 원본 캘린더를 읽습니다. 토큰은 현재 브라우저 탭 세션에만 저장됩니다.</div>'+ '<div class="form-group" style="margin-top:12px"><label>Google OAuth Web Client ID</label><input id="rm-google-client-id" type="text" autocomplete="off" placeholder="1234567890-....apps.googleusercontent.com"></div>'+ '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><button id="rm-google-save" class="btn btn-ghost btn-sm">Client ID 저장</button><button id="rm-google-connect" class="btn btn-primary btn-sm">운영팀 Google 연결</button><button id="rm-google-disconnect" class="btn btn-ghost btn-sm">세션 해제</button><span id="rm-google-status" style="font-size:12px"></span></div>'+ '<div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:10px">OAuth 승인 화면에서는 반드시 <b>ryanmembers.rmhq@gmail.com</b>을 선택하세요. 권한은 Calendar 읽기 전용입니다.</div>';
+  card.innerHTML='<div class="card-title">Google Calendar · 운영팀 계정</div>'+ '<div class="notice">스케줄러는 <b>ryanmembers.rmhq@gmail.com</b>으로 로그인해 강사 원본 캘린더를 읽습니다. 토큰은 현재 브라우저 탭 세션에만 저장됩니다.</div>'+ '<div class="form-group" style="margin-top:12px"><label>Google OAuth Web Client ID</label><input id="rm-google-client-id" type="text" autocomplete="off" placeholder="1234567890-....apps.googleusercontent.com"></div>'+ '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><button id="rm-google-save" class="btn btn-ghost btn-sm">Client ID 저장</button><button id="rm-google-connect" class="btn btn-primary btn-sm">운영팀 Google 연결</button><button id="rm-google-disconnect" class="btn btn-ghost btn-sm">세션 해제</button><span id="rm-google-status" style="font-size:12px"></span></div>'+ '<div style="font-size:11px;color:var(--muted);line-height:1.65;margin-top:10px">Google Cloud의 OAuth Web Client에 <b>Authorized JavaScript origin</b>으로 <code>https://batlifer-cmyk.github.io</code>를 등록해야 합니다. Google Calendar API를 활성화하고, 승인 화면에서는 반드시 <b>ryanmembers.rmhq@gmail.com</b>을 선택하세요. 권한은 Calendar 읽기 전용입니다.</div>';
   const anchor=document.getElementById('rmv2Safety')||page.querySelector('.sec-sub');
   if(anchor)anchor.insertAdjacentElement('afterend',card);else page.prepend(card);
   const input=card.querySelector('#rm-google-client-id');input.value=clientId();
