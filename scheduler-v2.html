@@ -14,8 +14,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:#f5f4ef;font-family:sy
 </style>
 </head>
 <body>
-<div id="bar"><strong>RM Scheduler v2</strong><span class="chip ok">날짜기반</span><span class="chip ok optional">수업길이</span><span class="chip ok optional">최대 2강사</span><span id="diag" class="chip">점검 중</span><span id="status">안전패치 로딩 중…</span><a id="legacy" href="index.html" target="_blank">기존버전</a></div>
-<iframe id="app" src="index.html?v=legacy-20260808"></iframe>
+<div id="bar"><strong>RM Scheduler v2</strong><span class="chip ok">날짜기반</span><span class="chip ok optional">수업길이</span><span class="chip ok optional">최대 2강사</span><span id="diag" class="chip">점검 중</span><span id="status">안전패치 로딩 중…</span><a id="legacy" href="legacy.html" target="_blank">기존버전</a></div>
+<iframe id="app" src="legacy.html?v=legacy-20260808"></iframe>
 <script>
 const f=document.getElementById('app'),d=document.getElementById('diag'),st=document.getElementById('status');
 function inject(src){return new Promise((ok,fail)=>{const s=f.contentDocument.createElement('script');s.src=src+'?v=20260808-3';s.onload=ok;s.onerror=()=>fail(new Error(src+' 로드 실패'));f.contentDocument.body.appendChild(s);});}
