@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RM Scheduler v2</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#f5f4ef;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif}
+#bar{height:40px;display:flex;align-items:center;gap:10px;padding:0 14px;background:#202020;color:#fff;font-size:12px;box-sizing:border-box}
+#bar strong{font-size:13px}.chip{padding:3px 8px;border-radius:999px;background:#333;color:#ddd;white-space:nowrap}.chip.ok{background:#1f6f43;color:#fff}.chip.warn{background:#8a5a00;color:#fff}
+#status{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d5d5d5}#legacy{color:#bbb;text-decoration:none}
+#app{display:block;width:100%;height:calc(100% - 40px);border:0;background:#f5f4ef}
+@media(max-width:720px){#bar{gap:5px;padding:0 8px}.optional{display:none}#legacy{display:none}}
+</style>
+</head>
+<body>
+<div id="bar"><strong>RM Scheduler v2</strong><span class="chip ok">날짜기반</span><span class="chip ok optional">수업길이</span><span class="chip ok optional">최대 2강사</span><span id="diag" class="chip">점검 중</span><span id="status">안전패치 로딩 중…</span><a id="legacy" href="index.html" target="_blank">기존버전</a></div>
+<iframe id="app" src="index.html?v=legacy-20260808"></iframe>
+<script>
+const f=document.getElementById('app'),d=document.getElementById('diag'),st=document.getElementById('status');
+function inject(src){return new Promise((ok,fail)=>{const s=f.contentDocument.createElement('script');s.src=src+'?v=20260808-3';s.onload=ok;s.onerror=()=>fail(new Error(src+' 로드 실패'));f.contentDocument.body.appendChild(s);});}
+f.addEventListener('load',async()=>{try{await inject('v2-core.js');await inject('v2-ai.js');await inject('v2-io.js');st.textContent='패치 로드 완료 · 실제 날짜와 수업 길이 기준으로 충돌 판정';}catch(e){d.className='chip warn';d.textContent='패치 실패';st.textContent=e.message;}});
+addEventListener('message',e=>{if(e.origin!==location.origin||!e.data||e.data.type!=='rmv2-ready')return;const x=e.data.diag||{};d.className='chip '+(x.ok?'ok':'warn');d.textContent=x.ok?'자가점검 통과':'자가점검 실패';st.textContent=x.ok?'v2 '+x.version+' · 오늘 운영 가능':'일부 안전패치 점검 실패';});
+</script>
+</body>
+</html>
