@@ -1,15 +1,16 @@
 (function(){
 'use strict';
 
-const VERSION='2026.08.08.2';
+const VERSION='2026.08.09.3';
 const CLIENT_KEY='rm_google_oauth_client_id';
+const DEFAULT_CLIENT_ID='815354492275-55o79d9c04t81viu6h41m7ncolurr1b6.apps.googleusercontent.com';
 const TOKEN_KEY='rm_google_access_token';
 const EXP_KEY='rm_google_access_token_exp';
 const SCOPE='https://www.googleapis.com/auth/calendar.readonly';
 let tokenClient=null;
 let gisPromise=null;
 
-function clientId(){return String(localStorage.getItem(CLIENT_KEY)||'').trim();}
+function clientId(){return String(localStorage.getItem(CLIENT_KEY)||DEFAULT_CLIENT_ID).trim();}
 function token(){
   const t=sessionStorage.getItem(TOKEN_KEY)||'';
   const exp=Number(sessionStorage.getItem(EXP_KEY)||0);
@@ -19,7 +20,7 @@ function token(){
 function clearToken(){sessionStorage.removeItem(TOKEN_KEY);sessionStorage.removeItem(EXP_KEY);}
 function saveClientId(value){
   const v=String(value||'').trim();
-  if(v)localStorage.setItem(CLIENT_KEY,v);else localStorage.removeItem(CLIENT_KEY);
+  if(v&&v!==DEFAULT_CLIENT_ID)localStorage.setItem(CLIENT_KEY,v);else localStorage.removeItem(CLIENT_KEY);
   clearToken();tokenClient=null;renderStatus();
 }
 function loadGis(){
@@ -70,7 +71,7 @@ function eventToSlot(ev){
   if(!Number.isFinite(s.getTime())||!Number.isFinite(e.getTime())||e<=s)return null;
   const startMin=s.getHours()*60+s.getMinutes();
   const duration=Math.max(1,Math.round((e-s)/60000));
-  return {dow:s.getDay(),hour:s.getHours(),minute:s.getMinutes(),startMin,endMin:Math.min(1440,startMin+duration),dateStr:dateKey(s),startMs:s.getTime(),endMs:e.getTime(),recurring:false,uid:ev.id||'',summary:ev.summary||'',transport:'google-api'};
+  return {dow:s.getDay(),hour:s.getHours(),minute:s.getMinutes(),startMin,endMin:Math.min(1440,startMin+duration),dateStr:dateKey(s),startMs:s.getTime(),endMs:e.getTime(),recurring:false,uid:ev.id||'',summary:'',transport:'google-api'};
 }
 async function fetchInstructorCalendar(ins){
   if(!ins||!ins.calendarId)return null;
@@ -92,19 +93,16 @@ async function fetchInstructorCalendar(ins){
 function renderStatus(err){
   const st=document.getElementById('rm-google-status');if(!st)return;
   if(err){st.textContent='연결 오류 · '+err;st.style.color='var(--danger)';return;}
-  if(!clientId()){st.textContent='OAuth Client ID 미설정';st.style.color='var(--danger)';return;}
   if(token()){st.textContent='RMHQ Google 연결됨 · Calendar 읽기 가능';st.style.color='var(--success)';return;}
-  st.textContent='Client ID 설정됨 · 운영팀 Google 연결 필요';st.style.color='var(--muted)';
+  st.textContent='설정 완료 · 운영팀 Google 연결만 누르세요';st.style.color='var(--muted)';
 }
 function injectUi(){
   const page=document.getElementById('page-settings');
   if(!page||document.getElementById('rmGoogleAuthCard'))return;
   const card=document.createElement('div');card.id='rmGoogleAuthCard';card.className='card';
-  card.innerHTML='<div class="card-title">Google Calendar · 운영팀 계정</div>'+ '<div class="notice">스케줄러는 <b>ryanmembers.rmhq@gmail.com</b>으로 로그인해 강사 원본 캘린더를 읽습니다. 토큰은 현재 브라우저 탭 세션에만 저장됩니다.</div>'+ '<div class="form-group" style="margin-top:12px"><label>Google OAuth Web Client ID</label><input id="rm-google-client-id" type="text" autocomplete="off" placeholder="1234567890-....apps.googleusercontent.com"></div>'+ '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><button id="rm-google-save" class="btn btn-ghost btn-sm">Client ID 저장</button><button id="rm-google-connect" class="btn btn-primary btn-sm">운영팀 Google 연결</button><button id="rm-google-disconnect" class="btn btn-ghost btn-sm">세션 해제</button><span id="rm-google-status" style="font-size:12px"></span></div>'+ '<div style="font-size:11px;color:var(--muted);line-height:1.65;margin-top:10px">Google Cloud의 OAuth Web Client에 <b>Authorized JavaScript origin</b>으로 <code>https://batlifer-cmyk.github.io</code>를 등록해야 합니다. Google Calendar API를 활성화하고, 승인 화면에서는 반드시 <b>ryanmembers.rmhq@gmail.com</b>을 선택하세요. 권한은 Calendar 읽기 전용입니다.</div>';
+  card.innerHTML='<div class="card-title">Google Calendar · 운영팀 계정</div>'+ '<div class="notice">스케줄러는 <b>ryanmembers.rmhq@gmail.com</b>으로 로그인해 강사 원본 캘린더를 읽습니다. OAuth Client ID는 이미 설정되어 있습니다. 토큰은 현재 브라우저 탭 세션에만 저장됩니다.</div>'+ '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><button id="rm-google-connect" class="btn btn-primary btn-sm">운영팀 Google 연결</button><button id="rm-google-disconnect" class="btn btn-ghost btn-sm">세션 해제</button><span id="rm-google-status" style="font-size:12px"></span></div>'+ '<div style="font-size:11px;color:var(--muted);line-height:1.65;margin-top:10px">승인 화면에서는 <b>ryanmembers.rmhq@gmail.com</b>을 선택하세요. 권한은 Google Calendar 읽기 전용입니다.</div>';
   const anchor=document.getElementById('rmv2Safety')||page.querySelector('.sec-sub');
   if(anchor)anchor.insertAdjacentElement('afterend',card);else page.prepend(card);
-  const input=card.querySelector('#rm-google-client-id');input.value=clientId();
-  card.querySelector('#rm-google-save').onclick=()=>saveClientId(input.value);
   card.querySelector('#rm-google-connect').onclick=async()=>{try{await connect(true);if(typeof testAllICS==='function')await testAllICS();}catch(e){renderStatus(e.message||String(e));}};
   card.querySelector('#rm-google-disconnect').onclick=()=>{clearToken();renderStatus();};
   renderStatus();
@@ -112,5 +110,5 @@ function injectUi(){
 
 injectUi();
 window.__RMV2_GOOGLE__={version:VERSION,clientId,token,connect,fetchInstructorCalendar,clearToken,renderStatus};
-try{parent.postMessage({type:'rmv2-google-ready',google:{version:VERSION,configured:!!clientId(),connected:!!token()}},location.origin);}catch(_){ }
+try{parent.postMessage({type:'rmv2-google-ready',google:{version:VERSION,configured:true,connected:!!token()}},location.origin);}catch(_){ }
 })();
