@@ -7,11 +7,18 @@ const RM_CALENDAR_IDS = Object.freeze({
   dean: '2f1dff2664bb6fd9c5de5bf31aa0dbc87e680ae675fc474302f975a78b39bf64@group.calendar.google.com'
 });
 
+const RM_STATE_SCHEMA = 'rm-shared-state-v1';
+const RM_STATE_PASSWORD_KEY = 'RM_SHARED_PASSWORD_HASH';
+const RM_STATE_CONFIG_KEY = 'RM_SHARED_INSTRUCTOR_CONFIG';
+const RM_STATE_REV_KEY = 'RM_SHARED_REVISION';
+
 /**
- * Standalone Apps Script Web App for RM Scheduler.
+ * RM Scheduler Apps Script Web App
+ * - Google Calendar BUSY-only live read
+ * - Shared operator password
+ * - Shared instructor scheduling settings
+ *
  * Deploy from ryanmembers.rmhq@gmail.com as "Execute as me".
- * Returns BUSY time ranges only. Event titles, student names, descriptions,
- * guests, locations and event IDs never leave Apps Script.
  */
 function doPost(e) {
   try {
@@ -32,16 +39,23 @@ function doPost(e) {
 function doGet(e) {
   try {
     const p = (e && e.parameter) || {};
+    let result;
+
     if (p.action === 'calendar.busy') {
-      const result = rmCalendarBuildBusy_(p);
-      if (p.callback) return rmCalendarJsonp_(p.callback, result);
-      return rmCalendarJson_(result);
+      result = rmCalendarBuildBusy_(p);
+    } else if (String(p.action || '').indexOf('state.') === 0) {
+      result = rmStateHandle_(p);
+    } else {
+      result = {
+        ok: true,
+        service: 'rm-calendar-busy',
+        version: '2026.08.09.3',
+        sharedState: RM_STATE_SCHEMA
+      };
     }
-    return rmCalendarJson_({
-      ok: true,
-      service: 'rm-calendar-busy',
-      version: '2026.08.09.2'
-    });
+
+    if (p.callback) return rmCalendarJsonp_(p.callback, result);
+    return rmCalendarJson_(result);
   } catch (err) {
     const result = {
       ok: false,
@@ -51,6 +65,157 @@ function doGet(e) {
     const callback = e && e.parameter && e.parameter.callback;
     return callback ? rmCalendarJsonp_(callback, result) : rmCalendarJson_(result);
   }
+}
+
+function rmStateHandle_(p) {
+  const action = String(p.action || '');
+  const props = PropertiesService.getScriptProperties();
+
+  if (action === 'state.status') {
+    return {
+      ok: true,
+      schema: RM_STATE_SCHEMA,
+      passwordInitialized: !!props.getProperty(RM_STATE_PASSWORD_KEY),
+      hasConfig: !!props.getProperty(RM_STATE_CONFIG_KEY),
+      revision: Number(props.getProperty(RM_STATE_REV_KEY) || 0)
+    };
+  }
+
+  if (action === 'state.bootstrap') {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      if (props.getProperty(RM_STATE_PASSWORD_KEY)) {
+        return { ok: false, status: 'already_initialized', message: 'Shared state already initialized' };
+      }
+      const newHash = rmStateValidateHash_(p.newHash);
+      const config = rmStateSanitizeConfig_(p.config);
+      props.setProperty(RM_STATE_PASSWORD_KEY, newHash);
+      props.setProperty(RM_STATE_CONFIG_KEY, JSON.stringify(config));
+      props.setProperty(RM_STATE_REV_KEY, '1');
+      return { ok: true, schema: RM_STATE_SCHEMA, revision: 1 };
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  const storedHash = String(props.getProperty(RM_STATE_PASSWORD_KEY) || '');
+  if (!storedHash) {
+    return { ok: false, status: 'not_initialized', message: 'Shared state not initialized' };
+  }
+
+  const proof = rmStateValidateHash_(p.proof);
+  const authorized = rmStateSafeEqual_(storedHash, proof);
+
+  if (action === 'state.auth') {
+    return { ok: true, schema: RM_STATE_SCHEMA, authorized: authorized };
+  }
+
+  if (!authorized) {
+    return { ok: false, status: 'unauthorized', message: 'Invalid shared password' };
+  }
+
+  if (action === 'state.get') {
+    const raw = props.getProperty(RM_STATE_CONFIG_KEY) || '[]';
+    let instructors = [];
+    try { instructors = JSON.parse(raw); } catch (_) { instructors = []; }
+    return {
+      ok: true,
+      schema: RM_STATE_SCHEMA,
+      revision: Number(props.getProperty(RM_STATE_REV_KEY) || 0),
+      instructors: Array.isArray(instructors) ? instructors : []
+    };
+  }
+
+  if (action === 'state.save') {
+    const config = rmStateSanitizeConfig_(p.config);
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      const revision = Number(props.getProperty(RM_STATE_REV_KEY) || 0) + 1;
+      props.setProperty(RM_STATE_CONFIG_KEY, JSON.stringify(config));
+      props.setProperty(RM_STATE_REV_KEY, String(revision));
+      return { ok: true, schema: RM_STATE_SCHEMA, revision: revision };
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  if (action === 'state.password') {
+    const newHash = rmStateValidateHash_(p.newHash);
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      const current = String(props.getProperty(RM_STATE_PASSWORD_KEY) || '');
+      if (!rmStateSafeEqual_(current, proof)) {
+        return { ok: false, status: 'unauthorized', message: 'Password changed by another operator' };
+      }
+      props.setProperty(RM_STATE_PASSWORD_KEY, newHash);
+      return { ok: true, schema: RM_STATE_SCHEMA };
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  return { ok: false, status: 'unknown_action', message: 'Unknown shared-state action' };
+}
+
+function rmStateValidateHash_(value) {
+  const s = String(value || '').toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(s)) throw new Error('Invalid password proof');
+  return s;
+}
+
+function rmStateSafeEqual_(a, b) {
+  a = String(a || '');
+  b = String(b || '');
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+function rmStateSanitizeConfig_(raw) {
+  let input = raw;
+  if (typeof input === 'string') {
+    if (input.length > 12000) throw new Error('Instructor config too large');
+    input = JSON.parse(input || '[]');
+  }
+  if (!Array.isArray(input)) throw new Error('Invalid instructor config');
+  if (input.length > 30) throw new Error('Too many instructors');
+
+  const allowedDays = ['월','화','수','목','금','토','일'];
+  const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+  return input.map(function(row) {
+    row = row || {};
+    const id = String(row.id || '').trim();
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) throw new Error('Invalid instructor id');
+
+    const days = (Array.isArray(row.days) ? row.days : [])
+      .map(String).filter(function(x) { return allowedDays.indexOf(x) >= 0; }).slice(0, 7);
+    const times = (Array.isArray(row.times) ? row.times : [])
+      .map(String).filter(function(x) { return timeRe.test(x); }).slice(0, 32);
+    const subjects = (Array.isArray(row.subjects) ? row.subjects : [])
+      .map(function(x) { return String(x).slice(0, 80); }).slice(0, 32);
+    const maxConsec = Math.max(1, Math.min(12, Number(row.maxConsec) || 4));
+    const dayTimes = {};
+    const srcDayTimes = row.dayTimes && typeof row.dayTimes === 'object' ? row.dayTimes : {};
+    allowedDays.forEach(function(day) {
+      if (!Array.isArray(srcDayTimes[day])) return;
+      dayTimes[day] = srcDayTimes[day]
+        .map(String).filter(function(x) { return timeRe.test(x); }).slice(0, 32);
+    });
+
+    return {
+      id: id,
+      days: days,
+      times: times,
+      dayTimes: dayTimes,
+      subjects: subjects,
+      maxConsec: maxConsec
+    };
+  });
 }
 
 function rmCalendarParseBody_(e) {
