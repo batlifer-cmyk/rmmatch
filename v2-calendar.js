@@ -1,8 +1,9 @@
 (function(){
 'use strict';
 
-const RMV2_CALENDAR_VERSION='2026.08.09.1';
+const RMV2_CALENDAR_VERSION='2026.08.09.2';
 const PAUL_AVAILABILITY_REV='2026-08-08-paul-1';
+const DAVID_AVAILABILITY_REV='2026-08-09-david-wed-evening-1';
 const JENNA_AVAILABILITY_REV='2026-08-09-jenna-1';
 const DEAN_AVAILABILITY_REV='2026-08-09-dean-1';
 const CANONICAL={
@@ -19,6 +20,7 @@ function normalizeCalendarSource(raw){return String(raw||'').trim();}
 function snapshotReader(){return window.__RMV2_SNAPSHOT__||null;}
 function googleReader(){return window.__RMV2_GOOGLE__||null;}
 function googleConnected(){const g=googleReader();return !!(g&&typeof g.token==='function'&&g.token());}
+function sortTimes(list){return [...new Set((list||[]).filter(Boolean))].sort((a,b)=>{const m=x=>{const p=String(x).split(':').map(Number);return (p[0]||0)*60+(p[1]||0);};return m(a)-m(b);});}
 
 function migrateInstructorSources(){
   if(!Array.isArray(instructors))return false;
@@ -29,6 +31,18 @@ function migrateInstructorSources(){
     if(ins.calendarSourceLabel!==c.label){ins.calendarSourceLabel=c.label;dirty=true;}
     if(ins.id==='david'&&ins.calId===OLD_DAVID_EMBED){ins.calId='';dirty=true;}
   });
+
+  const david=instructors.find(i=>i&&i.id==='david');
+  if(david&&david.rmv2AvailabilityRevision!==DAVID_AVAILABILITY_REV){
+    if(!Array.isArray(david.days))david.days=[];
+    if(!david.days.includes('수'))david.days.push('수');
+    if(!david.dayTimes||typeof david.dayTimes!=='object')david.dayTimes={};
+    const wedBase=(Array.isArray(david.dayTimes['수'])&&david.dayTimes['수'].length)
+      ? david.dayTimes['수']
+      : (Array.isArray(david.times)?david.times:[]);
+    david.dayTimes['수']=sortTimes(wedBase.concat(['17:00','18:00']));
+    david.rmv2AvailabilityRevision=DAVID_AVAILABILITY_REV;dirty=true;
+  }
 
   const paul=instructors.find(i=>i&&i.id==='paul');
   if(paul&&paul.rmv2AvailabilityRevision!==PAUL_AVAILABILITY_REV){
@@ -164,7 +178,7 @@ function patchCalendarUi(){
 patchCalendarUi();
 const snap=snapshotReader();
 const snapshotFresh=!!(snap&&typeof snap.isFresh==='function'&&snap.isFresh());
-const calendarDiagnostics={version:RMV2_CALENDAR_VERSION,canonical:CANONICAL,paulAvailabilityRevision:PAUL_AVAILABILITY_REV,jennaAvailabilityRevision:JENNA_AVAILABILITY_REV,deanAvailabilityRevision:DEAN_AVAILABILITY_REV,unavailableCalendarInstructors,googleConnected,snapshotFresh};
+const calendarDiagnostics={version:RMV2_CALENDAR_VERSION,canonical:CANONICAL,paulAvailabilityRevision:PAUL_AVAILABILITY_REV,davidAvailabilityRevision:DAVID_AVAILABILITY_REV,jennaAvailabilityRevision:JENNA_AVAILABILITY_REV,deanAvailabilityRevision:DEAN_AVAILABILITY_REV,unavailableCalendarInstructors,googleConnected,snapshotFresh};
 window.__RMV2_CALENDAR__=calendarDiagnostics;
-try{parent.postMessage({type:'rmv2-calendar-ready',calendar:{version:RMV2_CALENDAR_VERSION,davidConfigured:true,googleConnected:googleConnected(),snapshotFresh,paulAvailabilityRevision:PAUL_AVAILABILITY_REV,jennaAvailabilityRevision:JENNA_AVAILABILITY_REV,deanAvailabilityRevision:DEAN_AVAILABILITY_REV}},location.origin);}catch(_){ }
+try{parent.postMessage({type:'rmv2-calendar-ready',calendar:{version:RMV2_CALENDAR_VERSION,davidConfigured:true,googleConnected:googleConnected(),snapshotFresh,paulAvailabilityRevision:PAUL_AVAILABILITY_REV,davidAvailabilityRevision:DAVID_AVAILABILITY_REV,jennaAvailabilityRevision:JENNA_AVAILABILITY_REV,deanAvailabilityRevision:DEAN_AVAILABILITY_REV}},location.origin);}catch(_){ }
 })();
