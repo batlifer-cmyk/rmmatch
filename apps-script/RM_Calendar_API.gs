@@ -29,12 +29,28 @@ function doPost(e) {
   }
 }
 
-function doGet() {
-  return rmCalendarJson_({
-    ok: true,
-    service: 'rm-calendar-busy',
-    version: '2026.08.09.1'
-  });
+function doGet(e) {
+  try {
+    const p = (e && e.parameter) || {};
+    if (p.action === 'calendar.busy') {
+      const result = rmCalendarBuildBusy_(p);
+      if (p.callback) return rmCalendarJsonp_(p.callback, result);
+      return rmCalendarJson_(result);
+    }
+    return rmCalendarJson_({
+      ok: true,
+      service: 'rm-calendar-busy',
+      version: '2026.08.09.2'
+    });
+  } catch (err) {
+    const result = {
+      ok: false,
+      status: 'exception',
+      message: err && err.message ? err.message : String(err)
+    };
+    const callback = e && e.parameter && e.parameter.callback;
+    return callback ? rmCalendarJsonp_(callback, result) : rmCalendarJson_(result);
+  }
 }
 
 function rmCalendarParseBody_(e) {
@@ -62,7 +78,7 @@ function rmCalendarBuildBusy_(body) {
     const events = cal.getEvents(from, to);
     const busy = [];
     events.forEach(function(ev) {
-      if (!ev || ev.isAllDayEvent()) return; // RM all-day entries are availability notes.
+      if (!ev || ev.isAllDayEvent()) return;
       if (ev.getTransparency() === CalendarApp.EventTransparency.TRANSPARENT) return;
       const start = ev.getStartTime();
       const end = ev.getEndTime();
@@ -124,4 +140,14 @@ function rmCalendarJson_(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function rmCalendarJsonp_(callback, obj) {
+  const name = String(callback || '');
+  if (!/^[A-Za-z_$][A-Za-z0-9_$]{0,80}$/.test(name)) {
+    return rmCalendarJson_({ ok: false, status: 'invalid_callback' });
+  }
+  return ContentService
+    .createTextOutput(name + '(' + JSON.stringify(obj) + ');')
+    .setMimeType(ContentService.MimeType.JAVASCRIPT);
 }
