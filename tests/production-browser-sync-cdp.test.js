@@ -7,7 +7,7 @@ const { spawn } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwGu-XsnJnphpLRzP_k--f4H2FM8-SegNP-Y9pCIaqWOhj31E1IcvdMD8q3b-9qORUh/exec';
-const APP_URL = 'https://batlifer-cmyk.github.io/rmmatch/scheduler-v2.html?e2e=20260810-16';
+const APP_URL = 'https://batlifer-cmyk.github.io/rmmatch/scheduler-v2.html?e2e=20260810-17';
 const RUN_PRODUCTION = process.env.RM_RUN_PRODUCTION_E2E === '1';
 
 function password() {
@@ -221,17 +221,54 @@ async function legacyLocalPassword(page) {
   `);
 }
 
-async function setDeanMaxConsec(page, value) {
+function sortTimes(times) {
+  return [...new Set(times)].sort((a, b) => {
+    const toMin = x => {
+      const [h, m] = String(x).split(':').map(Number);
+      return h * 60 + m;
+    };
+    return toMin(a) - toMin(b);
+  });
+}
+
+function changedCampbellTimes(original) {
+  const campbell = original.find(row => row.id === 'campbell');
+  assert(campbell, 'campbell config should exist');
+  const times = Array.isArray(campbell.times) ? campbell.times.slice() : [];
+  return times.includes('09:00')
+    ? sortTimes(times.filter(t => t !== '09:00'))
+    : sortTimes(times.concat('09:00'));
+}
+
+async function saveCampbellTimesThroughUi(page, times) {
   return page.eval(`
     (async () => {
       const w = document.getElementById('app').contentWindow;
       return w.eval(\`
         (async () => {
-          const ins = instructors.find(i => i.id === 'dean');
-          ins.maxConsec = ${Number(value)};
-          saveData();
+          openModal('campbell');
+          const selected = new Set(${JSON.stringify(times)});
+          document.querySelectorAll('#modal-times .time-chip').forEach(chip => {
+            chip.classList.toggle('on', selected.has(chip.dataset.t));
+          });
+          clearModalDayTimes();
+          saveInstructor();
           await __RMV2_SHARED_STATE__.saveRemoteNow();
           return __RMV2_SHARED_STATE__.state.revision;
+        })()
+      \`);
+    })()
+  `);
+}
+
+async function campbellModalCommonTimes(page) {
+  return page.eval(`
+    (() => {
+      const w = document.getElementById('app').contentWindow;
+      return w.eval(\`
+        (() => {
+          openModal('campbell');
+          return Array.from(document.querySelectorAll('#modal-times .time-chip.on')).map(chip => chip.dataset.t).sort();
         })()
       \`);
     })()
@@ -281,11 +318,11 @@ async function runProduction() {
   const before = await api('state.get');
   assert(before.ok, 'initial state.get should succeed');
   const original = before.instructors;
-  const dean = original.find(row => row.id === 'dean');
-  assert(dean, 'dean config should exist');
-  const changedMax = Number(dean.maxConsec) === 5 ? 4 : 5;
+  const changedTimes = changedCampbellTimes(original);
   const stale = JSON.parse(JSON.stringify(original));
-  stale.find(row => row.id === 'dean').maxConsec = changedMax === 5 ? 4 : 5;
+  stale.find(row => row.id === 'campbell').times = changedCampbellTimes(stale).includes('09:00')
+    ? stale.find(row => row.id === 'campbell').times.filter(t => t !== '09:00')
+    : stale.find(row => row.id === 'campbell').times.concat('09:00');
 
   const profileRoot = path.join(ROOT, 'work', 'browser-e2e');
   removeDir(profileRoot);
@@ -297,8 +334,15 @@ async function runProduction() {
     await login(a.page);
     assert.strictEqual(await legacyLocalPassword(a.page), null, 'Browser A central login should clear legacy local password');
     await verifySelectionProceeds(a.page);
-    await setDeanMaxConsec(a.page, changedMax);
+    await saveCampbellTimesThroughUi(a.page, changedTimes);
+    await waitFor(async () => {
+      const latest = await api('state.get');
+      const campbell = latest.instructors.find(row => row.id === 'campbell');
+      return latest.ok && JSON.stringify(sortTimes(campbell.times)) === JSON.stringify(changedTimes);
+    }, 10000, 'Campbell UI save to reach remote state');
     const aConfig = await compact(a.page);
+    const aModalTimes = await campbellModalCommonTimes(a.page);
+    assert.deepStrictEqual(aModalTimes, changedTimes, 'Browser A instructor modal should show saved Campbell times');
 
     await setStaleLocal(b.page, stale);
     await setLegacyLocalPassword(b.page);
@@ -306,8 +350,11 @@ async function runProduction() {
     assert.strictEqual(await legacyLocalPassword(b.page), null, 'Browser B central login should clear legacy local password');
     const bConfig = await compact(b.page);
     assert(sameConfig(aConfig, bConfig), 'Browser B should receive Browser A remote config');
+    const bModalTimes = await campbellModalCommonTimes(b.page);
+    assert.deepStrictEqual(bModalTimes, changedTimes, 'Browser B instructor modal should show Browser A Campbell times');
 
-    await setDeanMaxConsec(b.page, Number(dean.maxConsec) || 4);
+    const latest = await api('state.get');
+    await api('state.save', { baseRevision: latest.revision, config: JSON.stringify(original) });
     await reloadAndLogin(a.page);
     assert.strictEqual(await legacyLocalPassword(a.page), null, 'Browser A reload should not restore legacy local password');
     const aRestored = await compact(a.page);

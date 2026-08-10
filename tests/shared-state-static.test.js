@@ -26,6 +26,8 @@ assert(shared.includes('scheduleBackgroundLogin'), 'slow shared-state login shou
 assert(shared.includes('applyRemoteState(remote)'), 'remote config should be applied through a single runtime refresh path');
 assert(shared.includes('baseRevision'), 'state.save should send the base revision');
 assert(shared.includes('revision_conflict'), 'client should handle revision conflicts');
+assert(shared.includes('refreshOpenInstructorModal()'), 'remote config should refresh an already-open instructor modal');
+assert(shared.includes('originalSaveInstructor'), 'instructor edits should flush remote saves immediately');
 assert(!shared.includes("localStorage.getItem('rm_pw')"), 'shared login must not read browser-local passwords');
 assert(!shared.includes("localStorage.setItem('rm_pw'"), 'shared password changes must not write browser-local passwords');
 assert(!shared.includes('originalChangePw()'), 'shared password change must not fall back to legacy localStorage mutation');

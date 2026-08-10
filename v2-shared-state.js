@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 
-const VERSION='2026.08.10.6';
+const VERSION='2026.08.10.7';
 const DEFAULT_ENDPOINT='https://script.google.com/macros/s/AKfycbwGu-XsnJnphpLRzP_k--f4H2FM8-SegNP-Y9pCIaqWOhj31E1IcvdMD8q3b-9qORUh/exec';
 const STATUS_TIMEOUT_MS=5000;
 const LOGIN_STATUS_TIMEOUT_MS=1200;
@@ -51,10 +51,19 @@ function refreshRuntimeUi(){
   if(typeof renderDayCBs==='function')renderDayCBs();
   if(typeof ensureFrequencyOptions==='function')ensureFrequencyOptions();
   if(typeof renderInsGrid==='function')renderInsGrid();
+  refreshOpenInstructorModal();
   if(typeof initRangeSelector==='function')initRangeSelector();
   if(typeof initAnthropicKeyDisplay==='function')initAnthropicKeyDisplay();
   if(typeof initStudentDbFields==='function')initStudentDbFields();
   try{if(typeof icsCache==='object')Object.keys(icsCache).forEach(k=>delete icsCache[k]);}catch(_){ }
+}
+function refreshOpenInstructorModal(){
+  try{
+    const modal=document.getElementById('instructorModal');
+    const idEl=document.getElementById('modal-id');
+    if(!modal||!idEl||!modal.classList.contains('open')||!idEl.value)return;
+    if(typeof openModal==='function')openModal(idEl.value);
+  }catch(_){ }
 }
 function persistLocalConfig(){
   if(originalSaveData)originalSaveData();
@@ -151,6 +160,16 @@ function queueRemoteSave(){
 }
 const originalSaveData=typeof saveData==='function'?saveData:null;
 if(originalSaveData)saveData=function(){originalSaveData();queueRemoteSave();};
+
+const originalSaveInstructor=typeof saveInstructor==='function'?saveInstructor:null;
+if(originalSaveInstructor)saveInstructor=function(){
+  const result=originalSaveInstructor.apply(this,arguments);
+  if(state.ready&&!state.suppress){
+    clearTimeout(state.syncTimer);
+    saveRemoteNow().catch(e=>renderStatus('저장 오류 · '+(e.message||String(e)),true));
+  }
+  return result;
+};
 
 async function completeRemoteLogin(proof,st,opts){
   opts=opts||{};
