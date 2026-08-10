@@ -7,7 +7,7 @@ const { spawn } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwGu-XsnJnphpLRzP_k--f4H2FM8-SegNP-Y9pCIaqWOhj31E1IcvdMD8q3b-9qORUh/exec';
-const APP_URL = 'https://batlifer-cmyk.github.io/rmmatch/scheduler-v2.html?e2e=20260810-20';
+const APP_URL = 'https://batlifer-cmyk.github.io/rmmatch/scheduler-v2.html?e2e=20260810-21';
 const RUN_PRODUCTION = process.env.RM_RUN_PRODUCTION_E2E === '1';
 
 function password() {

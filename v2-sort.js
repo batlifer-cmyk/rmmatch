@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 
-const RMV2_SORT_VERSION='2026.08.10.1';
+const RMV2_SORT_VERSION='2026.08.10.2';
 const SORT_KEY='rmv2_result_sort';
 let currentSort=localStorage.getItem(SORT_KEY)||'recommended';
 let lastSlots=[];
@@ -22,25 +22,60 @@ function stats(slot){
   const warning=!!(slot&&slot.workloadWarning)||!!conn.actualMaxRunExceeded||!!(slot&&slot.rmv2ConsecutiveWarning);
   return {min,max,avg,spread,instructors,warning,score:Number(slot&&slot.score)||0};
 }
+function currentDayTimeMap(){
+  try{return typeof getDayTimeMap==='function'?(getDayTimeMap()||{}):{};}catch(_){return{};}
+}
+function requestRank(slot,map){
+  const entries=(slot&&slot.entries)||[];
+  const requestedDays=Object.keys(map||{});
+  if(!entries.length||!requestedDays.length)return {rank:0,before:0,maxDiff:0,score:0};
+  let exact=0,sameDay=0,before=0,maxDiff=0;
+  entries.forEach(e=>{
+    const wanted=(map&&map[e.day])||[];
+    const t=mins(e.time);
+    if(requestedDays.includes(e.day)){
+      sameDay++;
+      if(!wanted.length){exact++;return;}
+      const wantedMins=wanted.map(mins).filter(Number.isFinite);
+      if(wanted.includes(e.time))exact++;
+      if(wantedMins.length){
+        const minWanted=Math.min(...wantedMins);
+        if(t<minWanted)before++;
+        const diff=Math.min(...wantedMins.map(m=>Math.abs(m-t)));
+        maxDiff=Math.max(maxDiff,diff);
+      }
+    }else{
+      maxDiff=Math.max(maxDiff,1440);
+    }
+  });
+  const allExact=exact===entries.length;
+  const allSameDay=sameDay===entries.length;
+  const rank=allExact?0:(allSameDay&&before===0?1:(allSameDay?2:3));
+  const fit=slot&&slot.fit&&slot.fit.requested||{};
+  return {rank,before,maxDiff,score:Number(fit.score)||0};
+}
 function cmpNum(a,b){return a===b?0:(a<b?-1:1);}
 function sortSlots(slots,mode){
   const out=(slots||[]).slice();
+  const requestMap=currentDayTimeMap();
   out.sort((a,b)=>{
     const x=stats(a),y=stats(b);
+    const xr=requestRank(a,requestMap),yr=requestRank(b,requestMap);
+    const requestFirst=cmpNum(xr.rank,yr.rank)||cmpNum(xr.before,yr.before)||cmpNum(xr.maxDiff,yr.maxDiff)||cmpNum(yr.score,xr.score);
     if(mode==='early'){
-      return cmpNum(x.max,y.max)||cmpNum(x.avg,y.avg)||cmpNum(x.min,y.min)||cmpNum(y.score,x.score);
+      return requestFirst||cmpNum(x.max,y.max)||cmpNum(x.avg,y.avg)||cmpNum(x.min,y.min)||cmpNum(y.score,x.score);
     }
     if(mode==='late'){
-      return cmpNum(y.min,x.min)||cmpNum(y.avg,x.avg)||cmpNum(y.max,x.max)||cmpNum(y.score,x.score);
+      return requestFirst||cmpNum(y.min,x.min)||cmpNum(y.avg,x.avg)||cmpNum(y.max,x.max)||cmpNum(y.score,x.score);
     }
     if(mode==='same_time'){
-      return cmpNum(x.spread,y.spread)||cmpNum(x.avg,y.avg)||cmpNum(y.score,x.score);
+      return requestFirst||cmpNum(x.spread,y.spread)||cmpNum(x.avg,y.avg)||cmpNum(y.score,x.score);
     }
     if(mode==='single_instructor'){
-      return cmpNum(x.instructors,y.instructors)||cmpNum(x.max,y.max)||cmpNum(y.score,x.score);
+      return requestFirst||cmpNum(x.instructors,y.instructors)||cmpNum(x.max,y.max)||cmpNum(y.score,x.score);
     }
     if(mode==='low_workload'){
-      return cmpNum(x.warning?1:0,y.warning?1:0)||cmpNum(x.instructors,y.instructors)||cmpNum(x.max,y.max)||cmpNum(y.score,x.score);
+      return requestFirst||cmpNum(x.warning?1:0,y.warning?1:0)||cmpNum(x.instructors,y.instructors)||cmpNum(x.max,y.max)||cmpNum(y.score,x.score);
     }
     return cmpNum(y.score,x.score);
   });
@@ -78,7 +113,7 @@ function updateHint(){
   if(!el)return;
   const hints={
     recommended:'희망조건·강사·연강 점수를 종합한 기본 추천',
-    early:'각 조합에서 가장 늦은 수업시간이 이른 순',
+    early:'학생 희망시간에 맞는 후보 안에서 이른 시간순',
     late:'늦은 시간대 조합부터 표시',
     same_time:'요일별 수업시간 차이가 작은 조합 우선',
     single_instructor:'가능하면 한 명의 강사로 통일',
@@ -149,6 +184,6 @@ function rerender(){
   }
 }
 
-window.__RMV2_SORT__={version:RMV2_SORT_VERSION,mode:()=>currentSort,sortSlots,rerender};
+window.__RMV2_SORT__={version:RMV2_SORT_VERSION,mode:()=>currentSort,sortSlots,rerender,requestRank};
 try{parent.postMessage({type:'rmv2-sort-ready',sort:{version:RMV2_SORT_VERSION,mode:currentSort}},location.origin);}catch(_){ }
 })();

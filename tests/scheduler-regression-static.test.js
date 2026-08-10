@@ -22,6 +22,8 @@ assert(files['v2-workload.js'].includes('workloadWarning'), '5-hour candidates s
 
 assert(files['v2-sort.js'].includes('low_workload'), 'result sort should retain workload-aware sort mode');
 assert(files['v2-sort.js'].includes('warning'), 'sort should rank warning candidates lower');
+assert(files['v2-sort.js'].includes('requestRank'), 'result sort should keep requested day/time fit ahead of raw time ordering');
+assert(files['v2-sort.js'].includes('requestFirst||cmpNum(x.max,y.max)'), 'early sort should apply only inside the requested-time bucket');
 
 assert(/jenna\.days=\[[^\]]+,[^\]]+\]/.test(files['v2-calendar.js']), 'Jenna availability preference should stay limited to two days');
 assert(files['v2-calendar.js'].includes("jenna.times=['10:00','11:00','12:00','13:00']"), 'Jenna after-14:00 non-preference should stay reflected');
