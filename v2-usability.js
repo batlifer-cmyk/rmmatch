@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 
-const VERSION='2026.08.10.2';
+const VERSION='2026.08.10.3';
 const ACTIVE_CONTROL_ID='rmv2-modal-active';
 
 function isInstructorActive(ins){
@@ -175,13 +175,14 @@ function normalizePhone(text){
 function findPhoneMatch(raw,opts){
   opts=opts||{};
   const text=String(raw||'');
-  const formatted=text.match(/(?:\+?82[-.\s]?)?0?1[016789][-\s.]?\d{3,4}[-.\s]?\d{4}/);
-  if(formatted)return formatted;
   const compact=text.match(/\d{10,11}/);
-  if(!compact)return null;
-  const digits=compact[0];
-  if(opts.live&&digits.length<11)return null;
-  return compact;
+  if(compact){
+    const digits=compact[0];
+    if(!(opts.live&&digits.length<11))return compact;
+  }
+  const formatted=text.match(/(?:\+?82[-.\s]+)?0?1[016789][-\s.]+\d{3,4}[-.\s.]+\d{4}/);
+  if(formatted)return formatted;
+  return null;
 }
 
 function splitNamePhone(text,opts){
