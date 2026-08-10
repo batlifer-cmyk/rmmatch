@@ -7,7 +7,7 @@ const { spawn } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwGu-XsnJnphpLRzP_k--f4H2FM8-SegNP-Y9pCIaqWOhj31E1IcvdMD8q3b-9qORUh/exec';
-const APP_URL = 'https://batlifer-cmyk.github.io/rmmatch/scheduler-v2.html?e2e=20260810-17';
+const APP_URL = 'https://batlifer-cmyk.github.io/rmmatch/scheduler-v2.html?e2e=20260810-18';
 const RUN_PRODUCTION = process.env.RM_RUN_PRODUCTION_E2E === '1';
 
 function password() {
@@ -37,7 +37,8 @@ function canonical(rows) {
     times: row.times,
     dayTimes: row.dayTimes,
     subjects: row.subjects,
-    maxConsec: row.maxConsec
+    maxConsec: row.maxConsec,
+    active: row.active !== false
   }));
 }
 
@@ -146,6 +147,7 @@ async function launchBrowser(port, profileDir, initialUrl = APP_URL) {
 async function launchScheduler(port, profileDir) {
   const browser = await launchBrowser(port, profileDir, APP_URL);
   await waitFor(() => browser.page.eval("!!document.getElementById('app')?.contentWindow?.__RMV2_SHARED_STATE__", false), 20000, 'scheduler patches');
+  await waitFor(() => browser.page.eval("!!document.getElementById('app')?.contentWindow?.__RMV2_USABILITY__", false), 20000, 'usability patches');
   return browser;
 }
 
@@ -240,7 +242,7 @@ function changedCampbellTimes(original) {
     : sortTimes(times.concat('09:00'));
 }
 
-async function saveCampbellTimesThroughUi(page, times) {
+async function saveCampbellThroughUi(page, times, active) {
   return page.eval(`
     (async () => {
       const w = document.getElementById('app').contentWindow;
@@ -251,6 +253,8 @@ async function saveCampbellTimesThroughUi(page, times) {
           document.querySelectorAll('#modal-times .time-slot').forEach(slot => {
             slot.classList.toggle('selected', selected.has(slot.textContent.trim()));
           });
+          const activeBox = document.getElementById('rmv2-modal-active');
+          if (activeBox) activeBox.checked = ${active === false ? 'false' : 'true'};
           clearModalDayTimes();
           saveInstructor();
           await __RMV2_SHARED_STATE__.saveRemoteNow();
@@ -261,18 +265,37 @@ async function saveCampbellTimesThroughUi(page, times) {
   `);
 }
 
-async function campbellModalCommonTimes(page) {
+async function campbellModalState(page) {
   return page.eval(`
     (() => {
       const w = document.getElementById('app').contentWindow;
       return w.eval(\`
         (() => {
           openModal('campbell');
-          return Array.from(document.querySelectorAll('#modal-times .time-slot.selected')).map(slot => slot.textContent.trim()).sort();
+          return {
+            times: Array.from(document.querySelectorAll('#modal-times .time-slot.selected')).map(slot => slot.textContent.trim()).sort(),
+            active: document.getElementById('rmv2-modal-active')?.checked !== false,
+            directVisible: !!document.querySelector('#s-instructor-direct input[value="campbell"]')
+          };
         })()
       \`);
     })()
   `);
+}
+
+async function verifyIdentityParser(page) {
+  const parsed = await page.eval(`
+    (() => {
+      const w = document.getElementById('app').contentWindow;
+      const name = w.document.getElementById('s-name');
+      const phone = w.document.getElementById('s-phone');
+      name.value = '김누구 01000000000';
+      name.dispatchEvent(new w.Event('input', { bubbles: true }));
+      return { name: name.value, phone: phone.value };
+    })()
+  `);
+  assert.strictEqual(parsed.name, '김누구', 'combined student input should leave only the name');
+  assert.strictEqual(parsed.phone, '010-0000-0000', 'combined student input should normalize the phone');
 }
 
 async function verifySelectionProceeds(page) {
@@ -334,15 +357,17 @@ async function runProduction() {
     await login(a.page);
     assert.strictEqual(await legacyLocalPassword(a.page), null, 'Browser A central login should clear legacy local password');
     await verifySelectionProceeds(a.page);
-    await saveCampbellTimesThroughUi(a.page, changedTimes);
+    await verifyIdentityParser(a.page);
+    await saveCampbellThroughUi(a.page, changedTimes, false);
     await waitFor(async () => {
       const latest = await api('state.get');
       const campbell = latest.instructors.find(row => row.id === 'campbell');
-      return latest.ok && JSON.stringify(sortTimes(campbell.times)) === JSON.stringify(changedTimes);
+      return latest.ok && campbell.active === false && JSON.stringify(sortTimes(campbell.times)) === JSON.stringify(changedTimes);
     }, 10000, 'Campbell UI save to reach remote state');
     const aConfig = await compact(a.page);
-    const aModalTimes = await campbellModalCommonTimes(a.page);
-    assert.deepStrictEqual(aModalTimes, changedTimes, 'Browser A instructor modal should show saved Campbell times');
+    const aModal = await campbellModalState(a.page);
+    assert.deepStrictEqual(aModal.times, changedTimes, 'Browser A instructor modal should show saved Campbell times');
+    assert.strictEqual(aModal.active, false, 'Browser A instructor modal should show Campbell inactive');
 
     await setStaleLocal(b.page, stale);
     await setLegacyLocalPassword(b.page);
@@ -350,8 +375,10 @@ async function runProduction() {
     assert.strictEqual(await legacyLocalPassword(b.page), null, 'Browser B central login should clear legacy local password');
     const bConfig = await compact(b.page);
     assert(sameConfig(aConfig, bConfig), 'Browser B should receive Browser A remote config');
-    const bModalTimes = await campbellModalCommonTimes(b.page);
-    assert.deepStrictEqual(bModalTimes, changedTimes, 'Browser B instructor modal should show Browser A Campbell times');
+    const bModal = await campbellModalState(b.page);
+    assert.deepStrictEqual(bModal.times, changedTimes, 'Browser B instructor modal should show Browser A Campbell times');
+    assert.strictEqual(bModal.active, false, 'Browser B instructor modal should show Campbell inactive');
+    assert.strictEqual(bModal.directVisible, false, 'inactive Campbell should be hidden from direct instructor selection');
 
     const latest = await api('state.get');
     await api('state.save', { baseRevision: latest.revision, config: JSON.stringify(original) });

@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 
-const VERSION='2026.08.10.7';
+const VERSION='2026.08.10.8';
 const DEFAULT_ENDPOINT='https://script.google.com/macros/s/AKfycbwGu-XsnJnphpLRzP_k--f4H2FM8-SegNP-Y9pCIaqWOhj31E1IcvdMD8q3b-9qORUh/exec';
 const STATUS_TIMEOUT_MS=5000;
 const LOGIN_STATUS_TIMEOUT_MS=1200;
@@ -33,7 +33,7 @@ function compactInstructors(){
   return (Array.isArray(instructors)?instructors:[]).map(ins=>({
     id:String(ins.id||''),days:Array.isArray(ins.days)?ins.days.slice(0,7):[],times:Array.isArray(ins.times)?ins.times.slice(0,32):[],
     dayTimes:ins.dayTimes&&typeof ins.dayTimes==='object'?JSON.parse(JSON.stringify(ins.dayTimes)):{},
-    subjects:Array.isArray(ins.subjects)?ins.subjects.slice(0,32):[],maxConsec:Number(ins.maxConsec)||4
+    subjects:Array.isArray(ins.subjects)?ins.subjects.slice(0,32):[],maxConsec:Number(ins.maxConsec)||4,active:ins.active!==false
   })).filter(x=>x.id);
 }
 function applyConfig(rows){
@@ -43,6 +43,7 @@ function applyConfig(rows){
     if(Array.isArray(x.days))ins.days=x.days.slice();if(Array.isArray(x.times))ins.times=x.times.slice();
     if(x.dayTimes&&typeof x.dayTimes==='object')ins.dayTimes=JSON.parse(JSON.stringify(x.dayTimes));
     if(Array.isArray(x.subjects))ins.subjects=x.subjects.slice();if(Number.isFinite(Number(x.maxConsec)))ins.maxConsec=Number(x.maxConsec);
+    if(x.active!==undefined)ins.active=x.active!==false;else if(ins.active===undefined)ins.active=true;
   });
 }
 function refreshRuntimeUi(){

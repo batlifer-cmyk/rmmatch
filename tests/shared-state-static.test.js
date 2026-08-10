@@ -4,9 +4,11 @@ const path = require('path');
 
 const root = path.resolve(__dirname, '..');
 const shared = fs.readFileSync(path.join(root, 'v2-shared-state.js'), 'utf8');
+const usability = fs.readFileSync(path.join(root, 'v2-usability.js'), 'utf8');
 const appScript = fs.readFileSync(path.join(root, 'apps-script', 'RM_Calendar_API.gs'), 'utf8');
 
 assert.doesNotThrow(() => new Function(shared), 'v2-shared-state.js should parse as browser JavaScript');
+assert.doesNotThrow(() => new Function(usability), 'v2-usability.js should parse as browser JavaScript');
 assert.doesNotThrow(() => new Function(appScript), 'RM_Calendar_API.gs should parse as Apps Script JavaScript');
 
 const compactStart = shared.indexOf('function compactInstructors()');
@@ -14,7 +16,7 @@ const compactEnd = shared.indexOf('function applyConfig', compactStart);
 assert(compactStart >= 0 && compactEnd > compactStart, 'compactInstructors should be present');
 const compactBody = shared.slice(compactStart, compactEnd);
 
-['days', 'times', 'dayTimes', 'subjects', 'maxConsec'].forEach(field => {
+['days', 'times', 'dayTimes', 'subjects', 'maxConsec', 'active'].forEach(field => {
   assert(compactBody.includes(field), `central config should include ${field}`);
 });
 ['profile', 'calId', 'calendarId', 'calendarSourceLabel'].forEach(field => {
@@ -34,10 +36,16 @@ assert(!shared.includes('originalChangePw()'), 'shared password change must not 
 assert(!shared.includes('originalDoLogin()'), 'shared login must not fall back to legacy localStorage password auth');
 assert(shared.includes('clearLocalPassword()'), 'shared login should clear legacy browser-local password state');
 assert(shared.includes('state.password'), 'shared password change should use the central password endpoint');
+assert(usability.includes('isInstructorActive'), 'usability patch should define instructor active handling');
+assert(usability.includes('active=!!active.checked'), 'instructor modal should save active state');
+assert(usability.includes('originalComputeSlots'), 'inactive instructors should be filtered from slot results');
+assert(usability.includes('elementFromPoint'), 'student time drag should use pointer position hit testing');
+assert(usability.includes('splitNamePhone'), 'student name and phone should be parsed from combined input');
 
 assert(appScript.includes('baseRevision'), 'Apps Script should validate base revision');
 assert(appScript.includes("status: 'revision_conflict'"), 'Apps Script should return a conflict status');
 assert(appScript.includes('rmStateReadConfig_'), 'conflict response should include latest server config');
+assert(appScript.includes('active: row.active !== false'), 'Apps Script should preserve instructor active state');
 
 assert(appScript.includes('ev.isAllDayEvent()'), 'all-day availability notes must not be BUSY');
 assert(appScript.includes('CalendarApp.EventTransparency.TRANSPARENT'), 'transparent availability notes must not be BUSY');

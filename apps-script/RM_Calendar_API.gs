@@ -49,7 +49,7 @@ function doGet(e) {
       result = {
         ok: true,
         service: 'rm-calendar-busy',
-        version: '2026.08.10.5',
+        version: '2026.08.10.6',
         sharedState: RM_STATE_SCHEMA
       };
     }
@@ -233,7 +233,8 @@ function rmStateSanitizeConfig_(raw) {
       times: times,
       dayTimes: dayTimes,
       subjects: subjects,
-      maxConsec: maxConsec
+      maxConsec: maxConsec,
+      active: row.active !== false
     };
   });
 }
