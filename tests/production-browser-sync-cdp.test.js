@@ -248,8 +248,8 @@ async function saveCampbellTimesThroughUi(page, times) {
         (async () => {
           openModal('campbell');
           const selected = new Set(${JSON.stringify(times)});
-          document.querySelectorAll('#modal-times .time-chip').forEach(chip => {
-            chip.classList.toggle('on', selected.has(chip.dataset.t));
+          document.querySelectorAll('#modal-times .time-slot').forEach(slot => {
+            slot.classList.toggle('selected', selected.has(slot.textContent.trim()));
           });
           clearModalDayTimes();
           saveInstructor();
@@ -268,7 +268,7 @@ async function campbellModalCommonTimes(page) {
       return w.eval(\`
         (() => {
           openModal('campbell');
-          return Array.from(document.querySelectorAll('#modal-times .time-chip.on')).map(chip => chip.dataset.t).sort();
+          return Array.from(document.querySelectorAll('#modal-times .time-slot.selected')).map(slot => slot.textContent.trim()).sort();
         })()
       \`);
     })()
