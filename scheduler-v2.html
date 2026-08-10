@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="rm-build" content="20260810-11">
+<meta name="rm-build" content="20260810-12">
 <title>RM Scheduler v2</title>
 <style>
 html,body{margin:0;height:100%;overflow:hidden;background:#f5f4ef;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif}
@@ -16,12 +16,12 @@ html,body{margin:0;height:100%;overflow:hidden;background:#f5f4ef;font-family:sy
 </head>
 <body>
 <div id="bar"><strong>RM Scheduler v2</strong><span class="chip ok">날짜기반</span><span class="chip ok optional">수업길이</span><span class="chip ok optional">최대 2강사</span><span id="diag" class="chip">점검 중</span><span id="status">안전패치 로딩 중…</span><a id="legacy" href="legacy.html" target="_blank">기존버전</a></div>
-<iframe id="app" src="legacy.html?v=legacy-20260810-11"></iframe>
+<iframe id="app" src="legacy.html?v=legacy-20260810-12"></iframe>
 <script>
 const f=document.getElementById('app'),d=document.getElementById('diag'),st=document.getElementById('status');
 let snapshotFresh=false;
-function inject(src){return new Promise((ok,fail)=>{const s=f.contentDocument.createElement('script');s.src=src+'?v=20260810-11';s.onload=ok;s.onerror=()=>fail(new Error(src+' 로드 실패'));f.contentDocument.body.appendChild(s);});}
-f.addEventListener('load',async()=>{try{await inject('v2-core.js');await inject('v2-ai.js');await inject('v2-io.js');await inject('v2-snapshot.js');await inject('v2-google.js');await inject('v2-appsscript.js');await inject('v2-calendar.js');await inject('v2-live-refresh.js');await inject('v2-date-guard.js');await inject('v2-workload.js');await inject('v2-sort.js');await inject('v2-shared-state.js');await inject('v2-step-fix.js');st.textContent='패치 로드 완료 · 실시간 Calendar + 결과정렬 + 온라인 설정 준비';}catch(e){d.className='chip warn';d.textContent='패치 실패';st.textContent=e.message;}});
+function inject(src){return new Promise((ok,fail)=>{const s=f.contentDocument.createElement('script');s.src=src+'?v=20260810-12';s.onload=ok;s.onerror=()=>fail(new Error(src+' 로드 실패'));f.contentDocument.body.appendChild(s);});}
+f.addEventListener('load',async()=>{try{await inject('v2-core.js');await inject('v2-ai.js');await inject('v2-io.js');await inject('v2-snapshot.js');await inject('v2-google.js');await inject('v2-appsscript.js');await inject('v2-calendar.js');await inject('v2-live-refresh.js');await inject('v2-calendar-health.js');await inject('v2-date-guard.js');await inject('v2-workload.js');await inject('v2-sort.js');await inject('v2-shared-state.js');await inject('v2-step-fix.js');st.textContent='패치 로드 완료 · 실시간 Calendar 검증 + 결과정렬 + 온라인 공용설정';}catch(e){d.className='chip warn';d.textContent='패치 실패';st.textContent=e.message;}});
 addEventListener('message',e=>{
   if(e.origin!==location.origin||!e.data)return;
   if(e.data.type==='rmv2-ready'){const x=e.data.diag||{};d.className='chip '+(x.ok?'ok':'warn');d.textContent=x.ok?'자가점검 통과':'자가점검 실패';st.textContent=x.ok?'v2 '+x.version+' · 핵심 스케줄 점검 통과':'일부 안전패치 점검 실패';}
@@ -29,6 +29,7 @@ addEventListener('message',e=>{
   if(e.data.type==='rmv2-apps-script-ready'){const x=e.data.appsScript||{};if(x.configured){d.className='chip ok';d.textContent='RMHQ 실시간';st.textContent='Apps Script URL 내장됨 · 스케줄링 시 5명 Calendar 최신조회';}}
   if(e.data.type==='rmv2-google-ready'){const x=e.data.google||{};if(x.connected&&!f.contentWindow.__RMV2_APPS_SCRIPT__?.configured?.()){d.className='chip ok';d.textContent='Google fallback';st.textContent='운영팀 Google Calendar 직접연결 fallback 사용 가능';}}
   if(e.data.type==='rmv2-live-refresh-ready'){const x=e.data.live||{};if(x.appsConfigured){d.className='chip ok';d.textContent='RMHQ 실시간';st.textContent='추천/충돌검사 때 RMHQ Apps Script로 최신조회';}else if(x.googleConnected){d.className='chip ok';d.textContent='Google fallback';st.textContent='Apps Script 미설정 · Google 직접연결로 최신조회';}else{d.className='chip warn';d.textContent='스냅샷 fallback';st.textContent='Apps Script 연결 불가 · 현재는 익명 BUSY 스냅샷 사용';}}
+  if(e.data.type==='rmv2-calendar-health-ready')st.textContent='추천 전 5명 Calendar 강제검증 + 조회건수/속도 표시 활성화';
   if(e.data.type==='rmv2-date-guard-ready')st.textContent='실제 첫 수업일 BUSY 충돌검사 활성화';
   if(e.data.type==='rmv2-workload-ready')st.textContent='실제날짜 충돌검사 + 연강 5시간 경고 활성화';
   if(e.data.type==='rmv2-sort-ready')st.textContent='실시간 충돌검사 + 운영팀 결과 재정렬 활성화';
