@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 
-const VERSION='2026.08.10.1';
+const VERSION='2026.08.10.2';
 const ACTIVE_CONTROL_ID='rmv2-modal-active';
 
 function isInstructorActive(ins){
@@ -172,10 +172,22 @@ function normalizePhone(text){
   return String(text||'').trim();
 }
 
-function splitNamePhone(text){
+function findPhoneMatch(raw,opts){
+  opts=opts||{};
+  const text=String(raw||'');
+  const formatted=text.match(/(?:\+?82[-.\s]?)?0?1[016789][-\s.]?\d{3,4}[-.\s]?\d{4}/);
+  if(formatted)return formatted;
+  const compact=text.match(/\d{10,11}/);
+  if(!compact)return null;
+  const digits=compact[0];
+  if(opts.live&&digits.length<11)return null;
+  return compact;
+}
+
+function splitNamePhone(text,opts){
   const raw=String(text||'').trim();
   if(!raw)return null;
-  const match=raw.match(/(?:\+?82[-.\s]?)?0?1[016789][-\s.]?\d{3,4}[-.\s]?\d{4}|\d{10,11}/);
+  const match=findPhoneMatch(raw,opts);
   if(!match)return null;
   const phone=normalizePhone(match[0]);
   const name=raw.slice(0,match.index).trim()+' '+raw.slice(match.index+match[0].length).trim();
@@ -188,9 +200,9 @@ function patchStudentIdentityParsing(){
   if(!nameEl||!phoneEl||nameEl.dataset.rmv2IdentityParser==='1')return;
   nameEl.dataset.rmv2IdentityParser='1';
   let busy=false;
-  const applyFrom=(source)=>{
+  const applyFrom=(source,opts)=>{
     if(busy)return;
-    const parsed=splitNamePhone(source.value);
+    const parsed=splitNamePhone(source.value,opts);
     if(!parsed)return;
     busy=true;
     if(parsed.name)nameEl.value=parsed.name;
@@ -199,14 +211,14 @@ function patchStudentIdentityParsing(){
     if(typeof updateStudentDbSaveButtonState==='function')updateStudentDbSaveButtonState();
     if(typeof generateMessages==='function')try{generateMessages();}catch(_){ }
   };
-  nameEl.addEventListener('input',()=>applyFrom(nameEl));
-  nameEl.addEventListener('blur',()=>applyFrom(nameEl));
+  nameEl.addEventListener('input',()=>applyFrom(nameEl,{live:true}));
+  nameEl.addEventListener('blur',()=>applyFrom(nameEl,{live:false}));
   phoneEl.addEventListener('input',()=>{
-    if(/[^\d\s().+\-]/.test(phoneEl.value))applyFrom(phoneEl);
+    if(/[^\d\s().+\-]/.test(phoneEl.value))applyFrom(phoneEl,{live:true});
   });
   phoneEl.addEventListener('blur',()=>{
-    const parsed=splitNamePhone(phoneEl.value);
-    if(parsed)applyFrom(phoneEl);
+    const parsed=splitNamePhone(phoneEl.value,{live:false});
+    if(parsed)applyFrom(phoneEl,{live:false});
     else if(phoneEl.value.trim())phoneEl.value=normalizePhone(phoneEl.value);
   });
 }
@@ -218,6 +230,6 @@ patchStudentIdentityParsing();
 if(typeof renderInsGrid==='function')renderInsGrid();
 if(typeof refreshInsSel==='function')refreshInsSel();
 
-window.__RMV2_USABILITY__={version:VERSION,isInstructorActive,splitNamePhone,normalizePhone};
+window.__RMV2_USABILITY__={version:VERSION,isInstructorActive,splitNamePhone,normalizePhone,findPhoneMatch};
 try{parent.postMessage({type:'rmv2-usability-ready',usability:{version:VERSION}},location.origin);}catch(_){ }
 })();

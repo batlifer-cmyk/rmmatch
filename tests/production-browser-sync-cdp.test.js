@@ -7,7 +7,7 @@ const { spawn } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwGu-XsnJnphpLRzP_k--f4H2FM8-SegNP-Y9pCIaqWOhj31E1IcvdMD8q3b-9qORUh/exec';
-const APP_URL = 'https://batlifer-cmyk.github.io/rmmatch/scheduler-v2.html?e2e=20260810-18';
+const APP_URL = 'https://batlifer-cmyk.github.io/rmmatch/scheduler-v2.html?e2e=20260810-19';
 const RUN_PRODUCTION = process.env.RM_RUN_PRODUCTION_E2E === '1';
 
 function password() {
@@ -296,6 +296,24 @@ async function verifyIdentityParser(page) {
   `);
   assert.strictEqual(parsed.name, '김누구', 'combined student input should leave only the name');
   assert.strictEqual(parsed.phone, '010-0000-0000', 'combined student input should normalize the phone');
+
+  const live = await page.eval(`
+    (() => {
+      const w = document.getElementById('app').contentWindow;
+      const name = w.document.getElementById('s-name');
+      const phone = w.document.getElementById('s-phone');
+      name.value = '';
+      phone.value = '';
+      name.value = '김예림0109654112';
+      name.dispatchEvent(new w.Event('input', { bubbles: true }));
+      const before = { name: name.value, phone: phone.value };
+      name.value = '김예림01096541123';
+      name.dispatchEvent(new w.Event('input', { bubbles: true }));
+      return { before, after: { name: name.value, phone: phone.value } };
+    })()
+  `);
+  assert.deepStrictEqual(live.before, { name: '김예림0109654112', phone: '' }, 'live typing should not split a compact 10-digit phone prefix');
+  assert.deepStrictEqual(live.after, { name: '김예림', phone: '010-9654-1123' }, 'live typing should split after an 11-digit mobile phone is complete');
 }
 
 async function verifySelectionProceeds(page) {
