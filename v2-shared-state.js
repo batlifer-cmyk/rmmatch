@@ -1,9 +1,12 @@
 (function(){
 'use strict';
 
-const VERSION='2026.08.10.3';
+const VERSION='2026.08.10.4';
 const DEFAULT_ENDPOINT='https://script.google.com/macros/s/AKfycbwGu-XsnJnphpLRzP_k--f4H2FM8-SegNP-Y9pCIaqWOhj31E1IcvdMD8q3b-9qORUh/exec';
-const state={proof:'',revision:0,ready:false,supported:null,suppress:false,syncTimer:null,lastError:''};
+const STATUS_TIMEOUT_MS=5000;
+const STATUS_CACHE_MS=60000;
+const RETRY_MS=15000;
+const state={proof:'',revision:0,ready:false,supported:null,suppress:false,syncTimer:null,lastError:'',statusData:null,statusAt:0,statusPromise:null,retryTimer:null};
 
 function endpoint(){
   try{const a=window.__RMV2_APPS_SCRIPT__;if(a&&typeof a.endpoint==='function'&&a.endpoint())return a.endpoint();}catch(_){ }
@@ -14,7 +17,7 @@ function jsonp(action,params,timeoutMs){
     const cb='__rmStateCb_'+Date.now()+'_'+Math.random().toString(36).slice(2);
     const s=document.createElement('script');let done=false;
     const cleanup=()=>{try{delete window[cb];}catch(_){window[cb]=undefined;}if(s.parentNode)s.parentNode.removeChild(s);};
-    const timer=setTimeout(()=>{if(done)return;done=true;cleanup();reject(new Error('중앙 설정 응답 시간초과'));},timeoutMs||12000);
+    const timer=setTimeout(()=>{if(done)return;done=true;cleanup();reject(new Error('중앙 설정 응답 시간초과'));},timeoutMs||STATUS_TIMEOUT_MS);
     window[cb]=(data)=>{if(done)return;done=true;clearTimeout(timer);cleanup();resolve(data);};
     s.onerror=()=>{if(done)return;done=true;clearTimeout(timer);cleanup();reject(new Error('중앙 설정 연결 실패'));};
     const q=new URLSearchParams(Object.assign({},params||{},{action,callback:cb,_:Date.now()}));
@@ -44,18 +47,41 @@ function applyConfig(rows){
 function renderStatus(message,isError){
   state.lastError=isError?String(message||''):'';const el=document.getElementById('rm-shared-state-status');if(!el)return;
   if(message)el.textContent=message;else if(state.ready)el.textContent='중앙 설정 연결됨 · rev '+state.revision;
-  else if(state.supported===false)el.textContent='중앙 공유 백엔드 배포 대기 · 현재 이 브라우저 로컬 설정 사용';
-  else el.textContent='중앙 설정 확인 중';
-  el.style.color=isError?'var(--danger)':(state.ready?'var(--success)':'var(--muted)');
+  else if(state.supported===false)el.textContent='중앙 설정 확인 지연 · 앱은 계속 사용 가능 · 백그라운드 재시도 중';
+  else if(state.supported===true)el.textContent='중앙 백엔드 확인됨'+(state.statusData&&state.statusData.revision!=null?' · rev '+Number(state.statusData.revision||0):'');
+  else el.textContent='중앙 설정 확인 중 · 앱 사용 가능';
+  el.style.color=isError?'var(--danger)':(state.ready||state.supported===true?'var(--success)':'var(--muted)');
 }
-async function status(){
-  try{const x=await jsonp('state.status',{},9000);state.supported=!!(x&&x.ok===true&&x.schema==='rm-shared-state-v1');renderStatus();return x;}catch(e){state.supported=false;renderStatus();return null;}
+function scheduleRetry(){
+  clearTimeout(state.retryTimer);
+  if(state.ready||state.supported===true)return;
+  state.retryTimer=setTimeout(()=>{status(true).catch(()=>{});},RETRY_MS);
+}
+async function status(force){
+  if(!force&&state.statusData&&Date.now()-state.statusAt<STATUS_CACHE_MS)return state.statusData;
+  if(state.statusPromise)return state.statusPromise;
+  state.statusPromise=(async()=>{
+    try{
+      const x=await jsonp('state.status',{},STATUS_TIMEOUT_MS);
+      state.statusData=x;state.statusAt=Date.now();
+      state.supported=!!(x&&x.ok===true&&x.schema==='rm-shared-state-v1');
+      renderStatus();
+      if(!state.supported)scheduleRetry();
+      return x;
+    }catch(e){
+      state.supported=false;
+      renderStatus('중앙 설정 응답 지연 · 앱은 계속 사용 가능 · 자동 재시도 중',false);
+      scheduleRetry();
+      return null;
+    }finally{state.statusPromise=null;}
+  })();
+  return state.statusPromise;
 }
 async function saveRemoteNow(){
   if(!state.ready||!state.proof||state.suppress)return false;
-  const res=await jsonp('state.save',{proof:state.proof,config:JSON.stringify(compactInstructors())},15000);
+  const res=await jsonp('state.save',{proof:state.proof,config:JSON.stringify(compactInstructors())},10000);
   if(!res||res.ok!==true)throw new Error(res&&res.message||'중앙 설정 저장 실패');
-  state.revision=Number(res.revision)||state.revision;renderStatus('중앙 설정 저장됨 · rev '+state.revision,false);return true;
+  state.revision=Number(res.revision)||state.revision;state.statusData=Object.assign({},state.statusData||{},{revision:state.revision});state.statusAt=Date.now();renderStatus('중앙 설정 저장됨 · rev '+state.revision,false);return true;
 }
 function queueRemoteSave(){
   if(!state.ready||!state.proof||state.suppress)return;clearTimeout(state.syncTimer);
@@ -67,26 +93,24 @@ if(originalSaveData)saveData=function(){originalSaveData();queueRemoteSave();};
 const originalDoLogin=typeof doLogin==='function'?doLogin:null;
 doLogin=async function(){
   const pw=document.getElementById('pwInput').value;const err=document.getElementById('loginErr');if(err)err.style.display='none';
-  const st=await status();
-  if(!st||state.supported!==true){
-    if(originalDoLogin)return originalDoLogin();
-    return;
-  }
+  const st=await status(false);
+  if(!st||state.supported!==true){if(originalDoLogin)return originalDoLogin();return;}
   try{
     const proof=await sha256(pw);state.suppress=true;if(typeof loadData==='function')loadData();
     if(!st.passwordInitialized){
       const localExpected=localStorage.getItem('rm_pw')||PW_DEFAULT;
       if(pw!==localExpected){state.suppress=false;if(err)err.style.display='block';return;}
-      const boot=await jsonp('state.bootstrap',{newHash:proof,config:JSON.stringify(compactInstructors())},16000);
+      const boot=await jsonp('state.bootstrap',{newHash:proof,config:JSON.stringify(compactInstructors())},10000);
       if(!boot||boot.ok!==true)throw new Error(boot&&boot.message||'중앙 설정 초기화 실패');
+      state.statusData=Object.assign({},st,{passwordInitialized:true,hasConfig:true,revision:Number(boot.revision)||1});state.statusAt=Date.now();
     }else{
-      const auth=await jsonp('state.auth',{proof},12000);
+      const auth=await jsonp('state.auth',{proof},8000);
       if(!auth||auth.ok!==true||!auth.authorized){state.suppress=false;if(err)err.style.display='block';return;}
     }
-    state.proof=proof;const remote=await jsonp('state.get',{proof},15000);
+    state.proof=proof;const remote=await jsonp('state.get',{proof},10000);
     if(!remote||remote.ok!==true)throw new Error(remote&&remote.message||'중앙 설정 읽기 실패');
     if(Array.isArray(remote.instructors))applyConfig(remote.instructors);state.revision=Number(remote.revision)||0;
-    if(originalSaveData)originalSaveData();state.suppress=false;state.ready=true;
+    if(originalSaveData)originalSaveData();state.suppress=false;state.ready=true;clearTimeout(state.retryTimer);
     document.getElementById('loginScreen').style.display='none';
     if(typeof refreshInsSel==='function')refreshInsSel();if(typeof renderSubjectCBs==='function')renderSubjectCBs('s-subjects',[]);
     if(typeof renderDayCBs==='function')renderDayCBs();if(typeof ensureFrequencyOptions==='function')ensureFrequencyOptions();
@@ -100,7 +124,7 @@ changePw=async function(){
   if(!state.ready){if(originalChangePw)return originalChangePw();return;}
   const p1=document.getElementById('cfg-newpw').value,p2=document.getElementById('cfg-newpw2').value;
   if(!p1)return alert('새 비밀번호를 입력하세요.');if(p1!==p2)return alert('비밀번호가 일치하지 않습니다.');
-  try{const newHash=await sha256(p1);const res=await jsonp('state.password',{proof:state.proof,newHash},15000);
+  try{const newHash=await sha256(p1);const res=await jsonp('state.password',{proof:state.proof,newHash},10000);
     if(!res||res.ok!==true)throw new Error(res&&res.message||'비밀번호 변경 실패');state.proof=newHash;localStorage.removeItem('rm_pw');
     document.getElementById('cfg-newpw').value='';document.getElementById('cfg-newpw2').value='';renderStatus('공용 비밀번호 변경 완료',false);alert('공용 비밀번호가 변경되었습니다.');
   }catch(e){renderStatus('비밀번호 변경 오류 · '+(e.message||String(e)),true);alert(e.message||String(e));}
@@ -109,10 +133,12 @@ changePw=async function(){
 function injectUi(){
   const page=document.getElementById('page-settings');if(!page||document.getElementById('rmSharedStateCard'))return;
   const card=document.createElement('div');card.id='rmSharedStateCard';card.className='card';
-  card.innerHTML='<div class="card-title">운영팀 공용 설정</div><div class="notice"><b>온라인 공유 대상:</b> 로그인 비밀번호, 강사 가능요일, 공통/요일별 가능시간, 과목, 최대 연강. 중앙 백엔드가 활성화되면 어느 PC에서 수정해도 동일하게 반영됩니다.</div><div id="rm-shared-state-status" style="font-size:12px;color:var(--muted)">중앙 설정 확인 중</div>';
-  const anchor=document.getElementById('rmAppsScriptCard')||page.querySelector('.sec-sub');if(anchor)anchor.insertAdjacentElement('afterend',card);else page.prepend(card);renderStatus();
+  card.innerHTML='<div class="card-title">운영팀 공용 설정</div><div class="notice"><b>온라인 공유 대상:</b> 로그인 비밀번호, 강사 가능요일, 공통/요일별 가능시간, 과목, 최대 연강. 중앙 확인은 백그라운드에서 진행되며 스케줄러 사용을 막지 않습니다.</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span id="rm-shared-state-status" style="font-size:12px;color:var(--muted)">중앙 설정 확인 중 · 앱 사용 가능</span><button id="rm-shared-state-retry" class="btn btn-sm" type="button">중앙 설정 다시 확인</button></div>';
+  const anchor=document.getElementById('rmAppsScriptCard')||page.querySelector('.sec-sub');if(anchor)anchor.insertAdjacentElement('afterend',card);else page.prepend(card);
+  card.querySelector('#rm-shared-state-retry').onclick=()=>{renderStatus('중앙 설정 다시 확인 중 · 앱 사용 가능',false);status(true).catch(()=>{});};renderStatus();
 }
-injectUi();status();
+injectUi();
+setTimeout(()=>{status(false).catch(()=>{});},0);
 window.__RMV2_SHARED_STATE__={version:VERSION,state,status,saveRemoteNow,compactInstructors,applyConfig};
 try{parent.postMessage({type:'rmv2-shared-state-ready',shared:{version:VERSION}},location.origin);}catch(_){ }
 })();
