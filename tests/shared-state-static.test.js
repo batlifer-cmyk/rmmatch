@@ -26,6 +26,12 @@ assert(shared.includes('scheduleBackgroundLogin'), 'slow shared-state login shou
 assert(shared.includes('applyRemoteState(remote)'), 'remote config should be applied through a single runtime refresh path');
 assert(shared.includes('baseRevision'), 'state.save should send the base revision');
 assert(shared.includes('revision_conflict'), 'client should handle revision conflicts');
+assert(!shared.includes("localStorage.getItem('rm_pw')"), 'shared login must not read browser-local passwords');
+assert(!shared.includes("localStorage.setItem('rm_pw'"), 'shared password changes must not write browser-local passwords');
+assert(!shared.includes('originalChangePw()'), 'shared password change must not fall back to legacy localStorage mutation');
+assert(!shared.includes('originalDoLogin()'), 'shared login must not fall back to legacy localStorage password auth');
+assert(shared.includes('clearLocalPassword()'), 'shared login should clear legacy browser-local password state');
+assert(shared.includes('state.password'), 'shared password change should use the central password endpoint');
 
 assert(appScript.includes('baseRevision'), 'Apps Script should validate base revision');
 assert(appScript.includes("status: 'revision_conflict'"), 'Apps Script should return a conflict status');

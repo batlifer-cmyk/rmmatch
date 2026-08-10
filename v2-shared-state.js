@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 
-const VERSION='2026.08.10.5';
+const VERSION='2026.08.10.6';
 const DEFAULT_ENDPOINT='https://script.google.com/macros/s/AKfycbwGu-XsnJnphpLRzP_k--f4H2FM8-SegNP-Y9pCIaqWOhj31E1IcvdMD8q3b-9qORUh/exec';
 const STATUS_TIMEOUT_MS=5000;
 const LOGIN_STATUS_TIMEOUT_MS=1200;
@@ -76,6 +76,17 @@ function openScheduler(){
   if(el)el.style.display='none';
   refreshRuntimeUi();
 }
+function clearLocalPassword(){
+  try{localStorage.removeItem('rm_pw');}catch(_){ }
+}
+function openLocalDefault(pw){
+  clearLocalPassword();
+  if(pw!==PW_DEFAULT)return false;
+  state.suppress=true;
+  try{if(typeof loadData==='function')loadData();}finally{state.suppress=false;}
+  openScheduler();
+  return true;
+}
 function timeoutValue(promise,ms,value){
   return new Promise(resolve=>{
     let done=false;
@@ -141,7 +152,6 @@ function queueRemoteSave(){
 const originalSaveData=typeof saveData==='function'?saveData:null;
 if(originalSaveData)saveData=function(){originalSaveData();queueRemoteSave();};
 
-const originalDoLogin=typeof doLogin==='function'?doLogin:null;
 async function completeRemoteLogin(proof,st,opts){
   opts=opts||{};
   state.suppress=true;
@@ -160,6 +170,7 @@ async function completeRemoteLogin(proof,st,opts){
     state.proof=proof;
     const remote=await jsonp('state.get',{proof},10000);
     applyRemoteState(remote);
+    clearLocalPassword();
     state.ready=true;state.pendingProof='';clearTimeout(state.retryTimer);clearTimeout(state.backgroundTimer);
     if(!opts.keepOpen)openScheduler();
     renderStatus();
@@ -196,23 +207,23 @@ doLogin=async function(){
   const proof=await sha256(pw);
   const st=await timeoutValue(status(false),LOGIN_STATUS_TIMEOUT_MS,null);
   if(!st||state.supported!==true){
-    if(originalDoLogin)originalDoLogin();
+    if(!openLocalDefault(pw)&&err)err.style.display='block';
     scheduleBackgroundLogin(proof);
     return;
   }
   try{
     if(!st.passwordInitialized){
       state.suppress=true;if(typeof loadData==='function')loadData();state.suppress=false;
-      const localExpected=localStorage.getItem('rm_pw')||PW_DEFAULT;
-      if(pw!==localExpected){state.suppress=false;if(err)err.style.display='block';return;}
+      clearLocalPassword();
+      if(pw!==PW_DEFAULT){state.suppress=false;if(err)err.style.display='block';return;}
     }
     await completeRemoteLogin(proof,st,{skipLoad:!st.passwordInitialized,keepOpen:false});
   }catch(e){state.suppress=false;state.proof='';renderStatus('중앙 설정 오류 · '+(e.message||String(e)),true);if(err){err.textContent=e.message||'중앙 운영 설정 연결 오류';err.style.display='block';}}
 };
 
-const originalChangePw=typeof changePw==='function'?changePw:null;
 changePw=async function(){
-  if(!state.ready){if(originalChangePw)return originalChangePw();return;}
+  clearLocalPassword();
+  if(!state.ready){renderStatus('Password change requires central settings connection',true);return alert('Password change requires central settings connection.');}
   const p1=document.getElementById('cfg-newpw').value,p2=document.getElementById('cfg-newpw2').value;
   if(!p1)return alert('새 비밀번호를 입력하세요.');if(p1!==p2)return alert('비밀번호가 일치하지 않습니다.');
   try{const newHash=await sha256(p1);const res=await jsonp('state.password',{proof:state.proof,newHash},10000);

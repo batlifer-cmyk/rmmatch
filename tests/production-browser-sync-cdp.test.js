@@ -7,7 +7,7 @@ const { spawn } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwGu-XsnJnphpLRzP_k--f4H2FM8-SegNP-Y9pCIaqWOhj31E1IcvdMD8q3b-9qORUh/exec';
-const APP_URL = 'https://batlifer-cmyk.github.io/rmmatch/scheduler-v2.html?e2e=20260810-15';
+const APP_URL = 'https://batlifer-cmyk.github.io/rmmatch/scheduler-v2.html?e2e=20260810-16';
 const RUN_PRODUCTION = process.env.RM_RUN_PRODUCTION_E2E === '1';
 
 function password() {
@@ -205,6 +205,22 @@ async function setStaleLocal(page, config) {
   `);
 }
 
+async function setLegacyLocalPassword(page, value = 'browser-local-only-password') {
+  await page.eval(`
+    (() => {
+      const w = document.getElementById('app').contentWindow;
+      w.localStorage.setItem('rm_pw', ${JSON.stringify(value)});
+      return true;
+    })()
+  `);
+}
+
+async function legacyLocalPassword(page) {
+  return page.eval(`
+    (() => document.getElementById('app').contentWindow.localStorage.getItem('rm_pw'))()
+  `);
+}
+
 async function setDeanMaxConsec(page, value) {
   return page.eval(`
     (async () => {
@@ -279,17 +295,21 @@ async function runProduction() {
   const b = await launchScheduler(9324, path.join(profileRoot, 'b'));
   try {
     await login(a.page);
+    assert.strictEqual(await legacyLocalPassword(a.page), null, 'Browser A central login should clear legacy local password');
     await verifySelectionProceeds(a.page);
     await setDeanMaxConsec(a.page, changedMax);
     const aConfig = await compact(a.page);
 
     await setStaleLocal(b.page, stale);
+    await setLegacyLocalPassword(b.page);
     await login(b.page);
+    assert.strictEqual(await legacyLocalPassword(b.page), null, 'Browser B central login should clear legacy local password');
     const bConfig = await compact(b.page);
     assert(sameConfig(aConfig, bConfig), 'Browser B should receive Browser A remote config');
 
     await setDeanMaxConsec(b.page, Number(dean.maxConsec) || 4);
     await reloadAndLogin(a.page);
+    assert.strictEqual(await legacyLocalPassword(a.page), null, 'Browser A reload should not restore legacy local password');
     const aRestored = await compact(a.page);
     assert(sameConfig(aRestored, original), 'Browser A fresh load should receive Browser B restored config');
 
@@ -322,6 +342,7 @@ async function runTimeoutFallback() {
         'rm_calendar_apps_script_url',
         'https://script.google.com/macros/s/AKfycbInvalidSlowSharedStateForE2E/exec'
       );
+      localStorage.setItem('rm_pw', 'browser-local-only-password');
       true;
     `);
     await browser.page.send('Page.navigate', { url: `${APP_URL}&timeout=${Date.now()}` });
@@ -330,6 +351,7 @@ async function runTimeoutFallback() {
     await loginAllowFallback(browser.page);
     const loginMs = Date.now() - started;
     assert(loginMs < 5000, `fallback login should not block for 5s; got ${loginMs}ms`);
+    assert.strictEqual(await legacyLocalPassword(browser.page), null, 'fallback login should clear legacy local password');
     await waitFor(() => browser.page.eval(`
       (() => {
         const w = document.getElementById('app').contentWindow;
