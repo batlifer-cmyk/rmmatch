@@ -1,12 +1,13 @@
 (function(){
 'use strict';
 
-const VERSION='2026.08.10.4';
+const VERSION='2026.08.10.5';
 const DEFAULT_ENDPOINT='https://script.google.com/macros/s/AKfycbwGu-XsnJnphpLRzP_k--f4H2FM8-SegNP-Y9pCIaqWOhj31E1IcvdMD8q3b-9qORUh/exec';
 const STATUS_TIMEOUT_MS=5000;
+const LOGIN_STATUS_TIMEOUT_MS=1200;
 const STATUS_CACHE_MS=60000;
 const RETRY_MS=15000;
-const state={proof:'',revision:0,ready:false,supported:null,suppress:false,syncTimer:null,lastError:'',statusData:null,statusAt:0,statusPromise:null,retryTimer:null};
+const state={proof:'',pendingProof:'',revision:0,ready:false,remoteApplied:false,supported:null,suppress:false,syncTimer:null,lastError:'',statusData:null,statusAt:0,statusPromise:null,retryTimer:null,backgroundTimer:null,savePromise:null};
 
 function endpoint(){
   try{const a=window.__RMV2_APPS_SCRIPT__;if(a&&typeof a.endpoint==='function'&&a.endpoint())return a.endpoint();}catch(_){ }
@@ -44,6 +45,44 @@ function applyConfig(rows){
     if(Array.isArray(x.subjects))ins.subjects=x.subjects.slice();if(Number.isFinite(Number(x.maxConsec)))ins.maxConsec=Number(x.maxConsec);
   });
 }
+function refreshRuntimeUi(){
+  if(typeof refreshInsSel==='function')refreshInsSel();
+  if(typeof renderSubjectCBs==='function')renderSubjectCBs('s-subjects',[]);
+  if(typeof renderDayCBs==='function')renderDayCBs();
+  if(typeof ensureFrequencyOptions==='function')ensureFrequencyOptions();
+  if(typeof renderInsGrid==='function')renderInsGrid();
+  if(typeof initRangeSelector==='function')initRangeSelector();
+  if(typeof initAnthropicKeyDisplay==='function')initAnthropicKeyDisplay();
+  if(typeof initStudentDbFields==='function')initStudentDbFields();
+  try{if(typeof icsCache==='object')Object.keys(icsCache).forEach(k=>delete icsCache[k]);}catch(_){ }
+}
+function persistLocalConfig(){
+  if(originalSaveData)originalSaveData();
+}
+function applyRemoteState(remote){
+  if(!remote||remote.ok!==true)throw new Error(remote&&remote.message||'중앙 설정 읽기 실패');
+  if(Array.isArray(remote.instructors))applyConfig(remote.instructors);
+  state.revision=Number(remote.revision)||0;
+  state.remoteApplied=Array.isArray(remote.instructors);
+  persistLocalConfig();
+  refreshRuntimeUi();
+}
+function isLoggedIn(){
+  const el=document.getElementById('loginScreen');
+  return !!(el&&el.style.display==='none');
+}
+function openScheduler(){
+  const el=document.getElementById('loginScreen');
+  if(el)el.style.display='none';
+  refreshRuntimeUi();
+}
+function timeoutValue(promise,ms,value){
+  return new Promise(resolve=>{
+    let done=false;
+    const timer=setTimeout(()=>{if(done)return;done=true;resolve(value);},ms);
+    Promise.resolve(promise).then(v=>{if(done)return;done=true;clearTimeout(timer);resolve(v);},()=>{if(done)return;done=true;clearTimeout(timer);resolve(value);});
+  });
+}
 function renderStatus(message,isError){
   state.lastError=isError?String(message||''):'';const el=document.getElementById('rm-shared-state-status');if(!el)return;
   if(message)el.textContent=message;else if(state.ready)el.textContent='중앙 설정 연결됨 · rev '+state.revision;
@@ -79,9 +118,21 @@ async function status(force){
 }
 async function saveRemoteNow(){
   if(!state.ready||!state.proof||state.suppress)return false;
-  const res=await jsonp('state.save',{proof:state.proof,config:JSON.stringify(compactInstructors())},10000);
-  if(!res||res.ok!==true)throw new Error(res&&res.message||'중앙 설정 저장 실패');
-  state.revision=Number(res.revision)||state.revision;state.statusData=Object.assign({},state.statusData||{},{revision:state.revision});state.statusAt=Date.now();renderStatus('중앙 설정 저장됨 · rev '+state.revision,false);return true;
+  if(state.savePromise)return state.savePromise;
+  state.savePromise=(async()=>{
+    const baseRevision=Number(state.revision)||0;
+    const res=await jsonp('state.save',{proof:state.proof,baseRevision,config:JSON.stringify(compactInstructors())},10000);
+    if(res&&res.status==='revision_conflict'){
+      applyRemoteState(res);
+      renderStatus('중앙 설정 충돌 · 최신 rev '+state.revision+' 적용됨',true);
+      throw new Error('중앙 설정 충돌: 최신 설정을 다시 불러왔습니다. 변경사항을 확인 후 다시 저장하세요.');
+    }
+    if(!res||res.ok!==true)throw new Error(res&&res.message||'중앙 설정 저장 실패');
+    state.revision=Number(res.revision)||state.revision;
+    state.statusData=Object.assign({},state.statusData||{},{revision:state.revision,hasConfig:true});
+    state.statusAt=Date.now();renderStatus('중앙 설정 저장됨 · rev '+state.revision,false);return true;
+  })();
+  try{return await state.savePromise;}finally{state.savePromise=null;}
 }
 function queueRemoteSave(){
   if(!state.ready||!state.proof||state.suppress)return;clearTimeout(state.syncTimer);
@@ -91,32 +142,72 @@ const originalSaveData=typeof saveData==='function'?saveData:null;
 if(originalSaveData)saveData=function(){originalSaveData();queueRemoteSave();};
 
 const originalDoLogin=typeof doLogin==='function'?doLogin:null;
-doLogin=async function(){
-  const pw=document.getElementById('pwInput').value;const err=document.getElementById('loginErr');if(err)err.style.display='none';
-  const st=await status(false);
-  if(!st||state.supported!==true){if(originalDoLogin)return originalDoLogin();return;}
+async function completeRemoteLogin(proof,st,opts){
+  opts=opts||{};
+  state.suppress=true;
   try{
-    const proof=await sha256(pw);state.suppress=true;if(typeof loadData==='function')loadData();
+    if(!opts.skipLoad&&typeof loadData==='function')loadData();
+    if(!st||st.schema!=='rm-shared-state-v1')st=await status(true);
+    if(!st||state.supported!==true)throw new Error('중앙 설정 확인 지연');
     if(!st.passwordInitialized){
-      const localExpected=localStorage.getItem('rm_pw')||PW_DEFAULT;
-      if(pw!==localExpected){state.suppress=false;if(err)err.style.display='block';return;}
       const boot=await jsonp('state.bootstrap',{newHash:proof,config:JSON.stringify(compactInstructors())},10000);
       if(!boot||boot.ok!==true)throw new Error(boot&&boot.message||'중앙 설정 초기화 실패');
       state.statusData=Object.assign({},st,{passwordInitialized:true,hasConfig:true,revision:Number(boot.revision)||1});state.statusAt=Date.now();
     }else{
       const auth=await jsonp('state.auth',{proof},8000);
-      if(!auth||auth.ok!==true||!auth.authorized){state.suppress=false;if(err)err.style.display='block';return;}
+      if(!auth||auth.ok!==true||!auth.authorized)throw new Error('중앙 비밀번호가 일치하지 않습니다');
     }
-    state.proof=proof;const remote=await jsonp('state.get',{proof},10000);
-    if(!remote||remote.ok!==true)throw new Error(remote&&remote.message||'중앙 설정 읽기 실패');
-    if(Array.isArray(remote.instructors))applyConfig(remote.instructors);state.revision=Number(remote.revision)||0;
-    if(originalSaveData)originalSaveData();state.suppress=false;state.ready=true;clearTimeout(state.retryTimer);
-    document.getElementById('loginScreen').style.display='none';
-    if(typeof refreshInsSel==='function')refreshInsSel();if(typeof renderSubjectCBs==='function')renderSubjectCBs('s-subjects',[]);
-    if(typeof renderDayCBs==='function')renderDayCBs();if(typeof ensureFrequencyOptions==='function')ensureFrequencyOptions();
-    if(typeof renderInsGrid==='function')renderInsGrid();if(typeof initRangeSelector==='function')initRangeSelector();
-    if(typeof initAnthropicKeyDisplay==='function')initAnthropicKeyDisplay();if(typeof initStudentDbFields==='function')initStudentDbFields();renderStatus();
-  }catch(e){state.suppress=false;state.proof='';renderStatus('중앙 설정 오류 · '+(e.message||String(e)),true);if(err){err.textContent='중앙 운영 설정 연결 오류';err.style.display='block';}}
+    state.proof=proof;
+    const remote=await jsonp('state.get',{proof},10000);
+    applyRemoteState(remote);
+    state.ready=true;state.pendingProof='';clearTimeout(state.retryTimer);clearTimeout(state.backgroundTimer);
+    if(!opts.keepOpen)openScheduler();
+    renderStatus();
+    return true;
+  }finally{
+    state.suppress=false;
+  }
+}
+function scheduleBackgroundLogin(proof){
+  if(!proof||state.ready)return;
+  state.pendingProof=proof;
+  clearTimeout(state.backgroundTimer);
+  const run=async()=>{
+    if(state.ready||!state.pendingProof)return;
+    try{
+      renderStatus((isLoggedIn()?'로컬 설정으로 사용 중 · ':'')+'중앙 설정 백그라운드 확인 중',false);
+      const st=await status(true);
+      if(st&&state.supported===true){
+        const localOpen=isLoggedIn();
+        await completeRemoteLogin(state.pendingProof,st,{skipLoad:localOpen,keepOpen:localOpen});
+        return;
+      }
+    }catch(e){
+      if(/비밀번호|unauthorized|Invalid shared password/i.test(e&&e.message||String(e))){
+        state.pendingProof='';renderStatus(e.message||String(e),true);return;
+      }
+    }
+    state.backgroundTimer=setTimeout(run,RETRY_MS);
+  };
+  state.backgroundTimer=setTimeout(run,0);
+}
+doLogin=async function(){
+  const pw=document.getElementById('pwInput').value;const err=document.getElementById('loginErr');if(err)err.style.display='none';
+  const proof=await sha256(pw);
+  const st=await timeoutValue(status(false),LOGIN_STATUS_TIMEOUT_MS,null);
+  if(!st||state.supported!==true){
+    if(originalDoLogin)originalDoLogin();
+    scheduleBackgroundLogin(proof);
+    return;
+  }
+  try{
+    if(!st.passwordInitialized){
+      state.suppress=true;if(typeof loadData==='function')loadData();state.suppress=false;
+      const localExpected=localStorage.getItem('rm_pw')||PW_DEFAULT;
+      if(pw!==localExpected){state.suppress=false;if(err)err.style.display='block';return;}
+    }
+    await completeRemoteLogin(proof,st,{skipLoad:!st.passwordInitialized,keepOpen:false});
+  }catch(e){state.suppress=false;state.proof='';renderStatus('중앙 설정 오류 · '+(e.message||String(e)),true);if(err){err.textContent=e.message||'중앙 운영 설정 연결 오류';err.style.display='block';}}
 };
 
 const originalChangePw=typeof changePw==='function'?changePw:null;
@@ -133,12 +224,15 @@ changePw=async function(){
 function injectUi(){
   const page=document.getElementById('page-settings');if(!page||document.getElementById('rmSharedStateCard'))return;
   const card=document.createElement('div');card.id='rmSharedStateCard';card.className='card';
-  card.innerHTML='<div class="card-title">운영팀 공용 설정</div><div class="notice"><b>온라인 공유 대상:</b> 로그인 비밀번호, 강사 가능요일, 공통/요일별 가능시간, 과목, 최대 연강. 중앙 확인은 백그라운드에서 진행되며 스케줄러 사용을 막지 않습니다.</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span id="rm-shared-state-status" style="font-size:12px;color:var(--muted)">중앙 설정 확인 중 · 앱 사용 가능</span><button id="rm-shared-state-retry" class="btn btn-sm" type="button">중앙 설정 다시 확인</button></div>';
+  card.innerHTML='<div class="card-title">운영팀 공용 설정</div><div class="notice"><b>온라인 공유 저장</b> 로그인 비밀번호, 강사 가능요일, 공통/요일별 가능시간, 과목, 최대 연강만 중앙 저장합니다. 학생 정보, Calendar 이벤트 내용, Calendar ID/profile 전체 객체는 중앙화하지 않습니다.</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span id="rm-shared-state-status" style="font-size:12px;color:var(--muted)">중앙 설정 확인 중 · 앱 사용 가능</span><button id="rm-shared-state-retry" class="btn btn-sm" type="button">다시 확인</button><button id="rm-shared-state-pull" class="btn btn-sm" type="button">중앙 설정 불러오기</button><button id="rm-shared-state-push" class="btn btn-sm" type="button">현재 설정 저장</button></div>';
   const anchor=document.getElementById('rmAppsScriptCard')||page.querySelector('.sec-sub');if(anchor)anchor.insertAdjacentElement('afterend',card);else page.prepend(card);
-  card.querySelector('#rm-shared-state-retry').onclick=()=>{renderStatus('중앙 설정 다시 확인 중 · 앱 사용 가능',false);status(true).catch(()=>{});};renderStatus();
+  card.querySelector('#rm-shared-state-retry').onclick=()=>{renderStatus('중앙 설정 다시 확인 중 · 앱 사용 가능',false);status(true).catch(()=>{});};
+  card.querySelector('#rm-shared-state-pull').onclick=async()=>{try{if(!state.ready)throw new Error('로그인 후 사용할 수 있습니다');state.suppress=true;const remote=await jsonp('state.get',{proof:state.proof},10000);applyRemoteState(remote);renderStatus('중앙 설정 불러옴 · rev '+state.revision,false);}catch(e){renderStatus('불러오기 오류 · '+(e.message||String(e)),true);}finally{state.suppress=false;}};
+  card.querySelector('#rm-shared-state-push').onclick=()=>saveRemoteNow().catch(e=>renderStatus('저장 오류 · '+(e.message||String(e)),true));
+  renderStatus();
 }
 injectUi();
 setTimeout(()=>{status(false).catch(()=>{});},0);
-window.__RMV2_SHARED_STATE__={version:VERSION,state,status,saveRemoteNow,compactInstructors,applyConfig};
+window.__RMV2_SHARED_STATE__={version:VERSION,state,status,saveRemoteNow,compactInstructors,applyConfig,applyRemoteState};
 try{parent.postMessage({type:'rmv2-shared-state-ready',shared:{version:VERSION}},location.origin);}catch(_){ }
 })();

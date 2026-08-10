@@ -49,7 +49,7 @@ function doGet(e) {
       result = {
         ok: true,
         service: 'rm-calendar-busy',
-        version: '2026.08.09.3',
+        version: '2026.08.10.5',
         sharedState: RM_STATE_SCHEMA
       };
     }
@@ -116,9 +116,7 @@ function rmStateHandle_(p) {
   }
 
   if (action === 'state.get') {
-    const raw = props.getProperty(RM_STATE_CONFIG_KEY) || '[]';
-    let instructors = [];
-    try { instructors = JSON.parse(raw); } catch (_) { instructors = []; }
+    const instructors = rmStateReadConfig_(props);
     return {
       ok: true,
       schema: RM_STATE_SCHEMA,
@@ -132,7 +130,22 @@ function rmStateHandle_(p) {
     const lock = LockService.getScriptLock();
     lock.waitLock(10000);
     try {
-      const revision = Number(props.getProperty(RM_STATE_REV_KEY) || 0) + 1;
+      const currentRevision = Number(props.getProperty(RM_STATE_REV_KEY) || 0);
+      if (p.baseRevision !== undefined && p.baseRevision !== '') {
+        const baseRevision = Number(p.baseRevision);
+        if (!Number.isFinite(baseRevision)) throw new Error('Invalid base revision');
+        if (baseRevision !== currentRevision) {
+          return {
+            ok: false,
+            schema: RM_STATE_SCHEMA,
+            status: 'revision_conflict',
+            message: 'Shared state changed by another browser',
+            revision: currentRevision,
+            instructors: rmStateReadConfig_(props)
+          };
+        }
+      }
+      const revision = currentRevision + 1;
       props.setProperty(RM_STATE_CONFIG_KEY, JSON.stringify(config));
       props.setProperty(RM_STATE_REV_KEY, String(revision));
       return { ok: true, schema: RM_STATE_SCHEMA, revision: revision };
@@ -173,6 +186,13 @@ function rmStateSafeEqual_(a, b) {
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
+}
+
+function rmStateReadConfig_(props) {
+  const raw = props.getProperty(RM_STATE_CONFIG_KEY) || '[]';
+  let instructors = [];
+  try { instructors = JSON.parse(raw); } catch (_) { instructors = []; }
+  return Array.isArray(instructors) ? instructors : [];
 }
 
 function rmStateSanitizeConfig_(raw) {
