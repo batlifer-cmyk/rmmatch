@@ -1,16 +1,26 @@
 (function(){
 'use strict';
 
-const VERSION='2026.08.10.3';
+const VERSION='2026.08.10.4';
 const ENDPOINT_KEY='rm_calendar_apps_script_url';
 const DEFAULT_ENDPOINT='https://script.google.com/macros/s/AKfycbwGu-XsnJnphpLRzP_k--f4H2FM8-SegNP-Y9pCIaqWOhj31E1IcvdMD8q3b-9qORUh/exec';
+const LEGACY_ENDPOINTS=new Set([
+  'https://script.google.com/macros/s/AKfycbyX5Rm89c_lJOBt6L_aGlz0a87k6V7gqAS7bCP5WfrPE9Cv-SWLD2aDZSCJqMDUstxe6A/exec'
+]);
 const CACHE_MS=8000;
 const state={data:null,fetchedAt:0,promise:null,error:''};
 
-function endpoint(){return String(localStorage.getItem(ENDPOINT_KEY)||DEFAULT_ENDPOINT).trim();}
+function endpoint(){
+  const saved=String(localStorage.getItem(ENDPOINT_KEY)||'').trim();
+  if(!saved||LEGACY_ENDPOINTS.has(saved)){
+    if(saved)try{localStorage.removeItem(ENDPOINT_KEY);}catch(_){ }
+    return DEFAULT_ENDPOINT;
+  }
+  return saved;
+}
 function saveEndpoint(value){
   const v=String(value||'').trim();
-  if(v&&v!==DEFAULT_ENDPOINT)localStorage.setItem(ENDPOINT_KEY,v);else localStorage.removeItem(ENDPOINT_KEY);
+  if(v&&v!==DEFAULT_ENDPOINT&&!LEGACY_ENDPOINTS.has(v))localStorage.setItem(ENDPOINT_KEY,v);else localStorage.removeItem(ENDPOINT_KEY);
   state.data=null;state.fetchedAt=0;state.error='';renderStatus();
 }
 function configured(){return /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec(?:\?.*)?$/.test(endpoint());}
