@@ -1,9 +1,9 @@
 (function(){
 'use strict';
 
-const VERSION='2026.08.09.2';
+const VERSION='2026.08.10.3';
 const ENDPOINT_KEY='rm_calendar_apps_script_url';
-const DEFAULT_ENDPOINT='https://script.google.com/macros/s/AKfycbyX5Rm89c_lJOBt6L_aGlz0a87k6V7gqAS7bCP5WfrPE9Cv-SWLD2aDZSCJqMDUstxe6A/exec';
+const DEFAULT_ENDPOINT='https://script.google.com/macros/s/AKfycbwGu-XsnJnphpLRzP_k--f4H2FM8-SegNP-Y9pCIaqWOhj31E1IcvdMD8q3b-9qORUh/exec';
 const CACHE_MS=8000;
 const state={data:null,fetchedAt:0,promise:null,error:''};
 
