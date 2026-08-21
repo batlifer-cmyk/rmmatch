@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="라이언멤버스 스피킹 전용 문법 학습 앱 안내. 말할 때 차이를 만들고, 들을 때 신호를 읽는 핵심 문법 훈련.">
+  <meta property="og:title" content="라이언멤버스 스피킹 문법 앱">
+  <meta property="og:description" content="스피킹과 리스닝에 바로 쓰이는 핵심 문법을 앱과 만화로 함께 안내합니다.">
+  <meta property="og:image" content="assets/chapter-02-why-grammar.png">
+  <title>라이언멤버스 스피킹 문법 앱</title>
+  <style>
+    :root {
+      --navy: #071d42;
+      --blue: #0b4f9f;
+      --green: #17632b;
+      --gold: #f5c736;
+      --orange: #d94a16;
+      --ink: #111827;
+      --muted: #5d6675;
+      --line: #d9e1ee;
+      --paper: #f8fafc;
+      --white: #ffffff;
+      color-scheme: light;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(245, 199, 54, .26), transparent 27rem),
+        linear-gradient(180deg, #f8fbff 0%, #eef5f0 42%, #f8fafc 100%);
+      color: var(--ink);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+      line-height: 1.5;
+    }
+
+    a { color: inherit; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid rgba(7, 29, 66, .12);
+      background: rgba(255, 255, 255, .9);
+      backdrop-filter: blur(16px);
+    }
+
+    .topbar-inner {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      font-weight: 900;
+      color: var(--navy);
+      letter-spacing: 0;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: var(--navy);
+      color: var(--gold);
+      font-weight: 900;
+      border: 2px solid var(--gold);
+      flex: 0 0 auto;
+    }
+
+    .brand-text {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0 16px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      text-decoration: none;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .button.primary {
+      background: var(--green);
+      color: var(--white);
+      box-shadow: 0 10px 24px rgba(23, 99, 43, .22);
+    }
+
+    .button.secondary {
+      background: var(--white);
+      color: var(--navy);
+      border-color: rgba(7, 29, 66, .18);
+    }
+
+    .hero {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      min-height: calc(100svh - 58px);
+      display: grid;
+      grid-template-columns: minmax(0, 1.02fr) minmax(320px, .98fr);
+      align-items: center;
+      gap: 42px;
+      padding: 48px 0 34px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 14px;
+      color: var(--green);
+      font-size: 15px;
+      font-weight: 900;
+    }
+
+    .eyebrow::before,
+    .eyebrow::after {
+      content: "";
+      width: 34px;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--green);
+    }
+
+    h1 {
+      margin: 0;
+      color: var(--navy);
+      font-size: clamp(42px, 7vw, 86px);
+      line-height: .96;
+      letter-spacing: 0;
+      font-weight: 950;
+    }
+
+    .hero-copy {
+      margin: 24px 0 0;
+      max-width: 620px;
+      color: #273244;
+      font-size: clamp(18px, 2vw, 23px);
+      font-weight: 750;
+    }
+
+    .hero-copy strong { color: var(--orange); }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 30px;
+    }
+
+    .hero-points {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 28px;
+      max-width: 650px;
+    }
+
+    .hero-point {
+      padding: 14px 12px;
+      border: 1px solid rgba(7, 29, 66, .12);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .82);
+      box-shadow: 0 10px 28px rgba(7, 29, 66, .06);
+    }
+
+    .hero-point b {
+      display: block;
+      color: var(--navy);
+      font-size: 15px;
+      line-height: 1.25;
+    }
+
+    .hero-point span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .hero-visual {
+      align-self: end;
+      margin: 0;
+    }
+
+    .hero-visual img {
+      display: block;
+      width: 100%;
+      max-height: calc(100svh - 118px);
+      object-fit: contain;
+      border-radius: 8px;
+      border: 3px solid var(--navy);
+      background: var(--white);
+      box-shadow: 0 24px 54px rgba(7, 29, 66, .18);
+    }
+
+    .section {
+      border-top: 1px solid rgba(7, 29, 66, .1);
+      padding: 64px 0;
+    }
+
+    .section.alt { background: rgba(255, 255, 255, .58); }
+
+    .inner {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      margin: 0;
+      color: var(--navy);
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .section-copy {
+      margin: 10px 0 0;
+      max-width: 660px;
+      color: var(--muted);
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .flow-item {
+      min-height: 128px;
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--white);
+      box-shadow: 0 12px 28px rgba(7, 29, 66, .06);
+    }
+
+    .flow-number {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--navy);
+      color: var(--white);
+      font-weight: 900;
+      margin-bottom: 10px;
+    }
+
+    .flow-item:nth-child(1) .flow-number { background: var(--green); }
+    .flow-item:nth-child(2) .flow-number { background: #0f766e; }
+    .flow-item:nth-child(3) .flow-number { background: var(--orange); }
+    .flow-item:nth-child(4) .flow-number { background: #5b3a9e; }
+    .flow-item:nth-child(5) .flow-number { background: var(--blue); }
+
+    .flow-item b {
+      display: block;
+      color: var(--navy);
+      font-size: 18px;
+      line-height: 1.28;
+    }
+
+    .flow-item span {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .comic-list {
+      display: grid;
+      gap: 24px;
+    }
+
+    .comic-card {
+      margin: 0;
+      border-radius: 8px;
+      border: 1px solid rgba(7, 29, 66, .16);
+      background: var(--white);
+      box-shadow: 0 16px 36px rgba(7, 29, 66, .09);
+      overflow: hidden;
+    }
+
+    .comic-card img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: var(--white);
+    }
+
+    .comic-caption {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 16px;
+      border-top: 1px solid var(--line);
+      color: var(--navy);
+      font-weight: 900;
+    }
+
+    .comic-caption span {
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 750;
+    }
+
+    .cta-band {
+      background: var(--navy);
+      color: var(--white);
+      padding: 58px 0;
+    }
+
+    .cta-inner {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    .cta-title {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    .cta-copy {
+      margin: 10px 0 0;
+      color: #dbe8ff;
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .cta-band .button.primary {
+      background: var(--gold);
+      color: var(--navy);
+      box-shadow: none;
+    }
+
+    footer {
+      padding: 28px 0 40px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    @media (max-width: 880px) {
+      .hero {
+        min-height: 0;
+        grid-template-columns: 1fr;
+        padding-top: 34px;
+      }
+
+      .hero-visual {
+        width: min(560px, 100%);
+        margin: 0 auto;
+      }
+
+      .hero-visual img { max-height: none; }
+
+      .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+      .section-head,
+      .cta-inner {
+        align-items: stretch;
+        flex-direction: column;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .topbar-inner {
+        width: min(100% - 20px, 1120px);
+        min-height: 54px;
+      }
+
+      .brand-mark {
+        width: 30px;
+        height: 30px;
+      }
+
+      .brand-text { max-width: 150px; }
+
+      .nav-actions .secondary { display: none; }
+
+      .button {
+        min-height: 40px;
+        padding-inline: 12px;
+        font-size: 14px;
+      }
+
+      .hero,
+      .inner,
+      .cta-inner {
+        width: min(100% - 20px, 1120px);
+      }
+
+      .hero-points,
+      .flow {
+        grid-template-columns: 1fr;
+      }
+
+      .section { padding: 42px 0; }
+
+      .comic-list { gap: 16px; }
+
+      .comic-caption {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="../scheduler-v2.html" aria-label="라이언멤버스 홈으로 이동">
+        <span class="brand-mark">R</span>
+        <span class="brand-text">RYAN MEMBERS</span>
+      </a>
+      <nav class="nav-actions" aria-label="주요 링크">
+        <a class="button secondary" href="#comic">안내 만화</a>
+        <a class="button primary" href="../speaking-grammar/">앱 실행</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div>
+        <p class="eyebrow">스피킹과 리스닝에 바로 쓰는 핵심</p>
+        <h1 id="hero-title">라이언멤버스<br>스피킹 문법 앱</h1>
+        <p class="hero-copy">
+          문법을 시험용 암기가 아니라 <strong>말의 차이를 만드는 엔진</strong>으로 훈련합니다.
+          앱으로 연습하고, 만화로 목적과 효과를 한 번에 이해할 수 있습니다.
+        </p>
+        <div class="hero-actions">
+          <a class="button primary" href="../speaking-grammar/">학습 앱 바로 실행</a>
+          <a class="button secondary" href="#comic">만화 전체 보기</a>
+        </div>
+        <div class="hero-points" aria-label="핵심 효과">
+          <div class="hero-point">
+            <b>말할 때</b>
+            <span>단어 나열이 아니라 문장 조립</span>
+          </div>
+          <div class="hero-point">
+            <b>들을 때</b>
+            <span>문법 형태를 의미 신호로 해석</span>
+          </div>
+          <div class="hero-point">
+            <b>익힌 뒤</b>
+            <span>왕초보에서 레벨 2로 진입</span>
+          </div>
+        </div>
+      </div>
+      <figure class="hero-visual">
+        <img src="assets/chapter-02-why-grammar.png" alt="왜 이 문법부터 배우나를 설명하는 라이언멤버스 스피킹 문법 앱 안내 만화">
+      </figure>
+    </section>
+
+    <section class="section alt" aria-labelledby="flow-title">
+      <div class="inner">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title" id="flow-title">먼저 잡는 5가지 핵심 문법</h2>
+            <p class="section-copy">앱은 말이 빨리 되는 순서대로 어순, 완료형, 문장확장, 도치, 이정표 언어를 먼저 다룹니다.</p>
+          </div>
+          <a class="button primary" href="../speaking-grammar/">앱에서 연습하기</a>
+        </div>
+        <div class="flow">
+          <div class="flow-item">
+            <span class="flow-number">1</span>
+            <b>어순</b>
+            <span>문장의 뼈대를 세웁니다.</span>
+          </div>
+          <div class="flow-item">
+            <span class="flow-number">2</span>
+            <b>완료형</b>
+            <span>시간과 경험의 체크포인트를 잡습니다.</span>
+          </div>
+          <div class="flow-item">
+            <span class="flow-number">3</span>
+            <b>문장확장</b>
+            <span>짧은 문장에 정보를 정확히 붙입니다.</span>
+          </div>
+          <div class="flow-item">
+            <span class="flow-number">4</span>
+            <b>도치</b>
+            <span>질문과 강조의 신호를 읽습니다.</span>
+          </div>
+          <div class="flow-item">
+            <span class="flow-number">5</span>
+            <b>이정표 언어</b>
+            <span>말하기 전에 논리의 깃발을 꽂습니다.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="comic" aria-labelledby="comic-title">
+      <div class="inner">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title" id="comic-title">앱 안내 만화</h2>
+            <p class="section-copy">문법을 왜 이 순서로 배우는지, 스피킹과 리스닝에 어떻게 연결되는지 한 흐름으로 보여줍니다.</p>
+          </div>
+        </div>
+        <div class="comic-list">
+          <figure class="comic-card">
+            <img src="assets/chapter-02-why-grammar.png" alt="왜 이 문법부터 배우나 안내 만화">
+            <figcaption class="comic-caption">왜 이 문법부터 배우나? <span>말할 때 차이를 만들고, 들을 때 그 차이를 알아듣는 훈련</span></figcaption>
+          </figure>
+          <figure class="comic-card">
+            <img src="assets/chapter-01-core-grammar.png" alt="이 앱이 먼저 가르치는 5가지 핵심 문법 안내 만화" loading="lazy">
+            <figcaption class="comic-caption">이 앱이 먼저 가르치는 5가지 핵심 문법 <span>우선순위가 곧 실력의 속도</span></figcaption>
+          </figure>
+          <figure class="comic-card">
+            <img src="assets/chapter-03-listening-signals.png" alt="듣기에서도 바로 도움이 된다 안내 만화" loading="lazy">
+            <figcaption class="comic-caption">듣기에서도 바로 도움이 된다 <span>문법 형태를 듣기 신호로 해석</span></figcaption>
+          </figure>
+          <figure class="comic-card">
+            <img src="assets/chapter-04-level-two.png" alt="여기까지 익히면 왕초보 끝 레벨 2 진입 안내 만화" loading="lazy">
+            <figcaption class="comic-caption">왕초보 끝, 레벨 2 진입 <span>말이 되는 문장을 스스로 조립하는 단계</span></figcaption>
+          </figure>
+          <figure class="comic-card">
+            <img src="assets/chapter-05-sentence-expansion.png" alt="문장확장으로 말을 길고 구체적으로 만드는 안내 만화" loading="lazy">
+            <figcaption class="comic-caption">문장확장으로 말을 길고 구체적으로 <span>짧은 문장을 정보가 있는 문장으로 키우기</span></figcaption>
+          </figure>
+          <figure class="comic-card">
+            <img src="assets/chapter-06-inversion.png" alt="도치로 강조와 질문 신호 읽기 안내 만화" loading="lazy">
+            <figcaption class="comic-caption">도치로 강조와 질문 신호 읽기 <span>순서를 바꿔 더 강한 신호 만들기</span></figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta-band" aria-labelledby="cta-title">
+      <div class="cta-inner">
+        <div>
+          <h2 class="cta-title" id="cta-title">만화로 이해하고, 앱에서 바로 연습하세요.</h2>
+          <p class="cta-copy">라이언멤버스 스피킹 문법 앱은 왕초보가 가장 빨리 말이 되게 만드는 순서로 설계되어 있습니다.</p>
+        </div>
+        <a class="button primary" href="../speaking-grammar/">학습 앱 실행</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    RYAN MEMBERS Speaking Grammar
+  </footer>
+</body>
+</html>
