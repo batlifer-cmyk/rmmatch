@@ -9,13 +9,13 @@
 html,body{margin:0;height:100%;overflow:hidden;background:#f5f4ef;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif}
 #bar{height:40px;display:flex;align-items:center;gap:10px;padding:0 14px;background:#202020;color:#fff;font-size:12px;box-sizing:border-box}
 #bar strong{font-size:13px}.chip{padding:3px 8px;border-radius:999px;background:#333;color:#ddd;white-space:nowrap}.chip.ok{background:#1f6f43;color:#fff}.chip.warn{background:#8a5a00;color:#fff}
-#status{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d5d5d5}.navlink{color:#fff;text-decoration:none;background:#17632b;border-radius:999px;padding:4px 9px;font-weight:700;white-space:nowrap}#legacy{color:#bbb;text-decoration:none}
+#status{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d5d5d5}#legacy{color:#bbb;text-decoration:none}
 #app{display:block;width:100%;height:calc(100% - 40px);border:0;background:#f5f4ef}
 @media(max-width:720px){#bar{gap:5px;padding:0 8px}.optional{display:none}#legacy{display:none}}
 </style>
 </head>
 <body>
-<div id="bar"><strong>RM Scheduler v2</strong><span class="chip ok">날짜기반</span><span class="chip ok optional">수업길이</span><span class="chip ok optional">최대 2강사</span><span id="diag" class="chip">점검 중</span><span id="status">안전패치 로딩 중…</span><a class="navlink" href="speaking-grammar-intro/" target="_blank">스피킹 문법</a><a id="legacy" href="legacy.html" target="_blank">기존버전</a></div>
+<div id="bar"><strong>RM Scheduler v2</strong><span class="chip ok">날짜기반</span><span class="chip ok optional">수업길이</span><span class="chip ok optional">최대 2강사</span><span id="diag" class="chip">점검 중</span><span id="status">안전패치 로딩 중…</span><a id="legacy" href="legacy.html" target="_blank">기존버전</a></div>
 <iframe id="app" src="legacy.html?v=legacy-20260810-21"></iframe>
 <script>
 const f=document.getElementById('app'),d=document.getElementById('diag'),st=document.getElementById('status');
